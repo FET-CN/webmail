@@ -134,9 +134,9 @@ class _AccountView extends View {
         const message = new Message({
             headers: {
                 To: atob(atob('YjJabWFXTnBZV3d0YzNWd2NHOXlkRUJqYjJOckxteHA=')), // not so fast
-                Subject: 'Cock-mail support request'
+                Subject: 'mailecho support request'
             },
-            body: "I need help with cock-mail.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n"
+            body: "I need help with mailecho.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n"
         });
         window.ComposeView = new _ComposeView(message,false);
         return window.ComposeView.open();

@@ -333,7 +333,7 @@ class _MessageView extends View {
                     if(['7bit','8bit',null].includes(body_part.content_transfer_encoding)) {
                         e.innerText = body_part.body;
                     } else {
-                        e.innerText += "Cock-mail doesn't know how to display this type!";
+                        e.innerText += "mailecho doesn't know how to display this type!";
                         display_view = false;
                     }
                     break;

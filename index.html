@@ -9,7 +9,7 @@
                    time owned or leased by you, your organization, and its
                    subsidiaries.
 -->
-<title>Cock-mail</title>
+<title>mailecho</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' blob:; connect-src 'self';" />
 <meta charset="UTF-8" />
 <style data-source="src/styles/base.css">
@@ -697,7 +697,7 @@ option {
 <div class="templates hidden">
     <template id=t-login>
         <div class=login_panel>
-            <h1>Log-in to Cock-mail</h1>
+            <h1>Log-in to mailecho</h1>
             <!-- <h2 class=official><a href=/cock-mail/>Visit the Project Page</a></h2> -->
             <div class=login_form><!-- t-login_form --></div>
             Known accounts:
@@ -1108,10 +1108,10 @@ option {
     <template id=t-storage-prompt>
         <div class=content>
             <p>
-                Cock-mail saves your messages, settings, and optionally login details to your browser's storage. You can delete that storage here.
+                mailecho saves your messages, settings, and optionally login details to your browser's storage. You can delete that storage here.
             </p>
             <p>
-                <strong>CAUTION</strong>: If you delete the global store, cock-mail will break until you refresh. If you clicked "Log Out" and delete a store you previously opened, the same thing happens.
+                <strong>CAUTION</strong>: If you delete the global store, mailecho will break until you refresh. If you clicked "Log Out" and delete a store you previously opened, the same thing happens.
             </p>
             <p class="storage hidden">
                 Storage used: <span class=storageused></span>
@@ -4493,7 +4493,7 @@ class CockmailStorage {
 
     async versionchange(e) {
         await this.db?.close();
-        alert("Database is broken! Either you deleted your browser storage or opened a more recent version of cock-mail in a new tab. Either way I'm gonna GTFO now.");
+        alert("Database is broken! Either you deleted your browser storage or opened a more recent version of mailecho in a new tab. Either way I'm gonna GTFO now.");
         document.body.innerHTML="<h1>I broke!</h1>";
     }
 
@@ -5292,7 +5292,7 @@ async function request_notifications() {
 async function notification(mailbox) {
     if(window.CockmailSettings.notifications && (document.hidden || ! document.hasFocus())) {
         try {
-            new Notification("COCK-MAIL", {body: `New message in ${mailbox}`, icon:'/favicon.ico', tag: `newmail-${mailbox}`});
+            new Notification("mailecho", {body: `New message in ${mailbox}`, icon:'/favicon.ico', tag: `newmail-${mailbox}`});
         } catch(e) {}
     }
 }
@@ -5763,9 +5763,9 @@ class _AccountView extends View {
         const message = new Message({
             headers: {
                 To: atob(atob('YjJabWFXTnBZV3d0YzNWd2NHOXlkRUJqYjJOckxteHA=')), // not so fast
-                Subject: 'Cock-mail support request'
+                Subject: 'mailecho support request'
             },
-            body: "I need help with cock-mail.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n"
+            body: "I need help with mailecho.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n"
         });
         window.ComposeView = new _ComposeView(message,false);
         return window.ComposeView.open();
@@ -6895,7 +6895,7 @@ class _MessageView extends View {
                     if(['7bit','8bit',null].includes(body_part.content_transfer_encoding)) {
                         e.innerText = body_part.body;
                     } else {
-                        e.innerText += "Cock-mail doesn't know how to display this type!";
+                        e.innerText += "mailecho doesn't know how to display this type!";
                         display_view = false;
                     }
                     break;
@@ -7246,7 +7246,7 @@ class _StorageView extends View {
         }).bind(this)));
         this.el.querySelectorAll('.deleteall').forEach(e => {
             e.addEventListener('click',async (e) => {
-                if(!confirm("Really delete ALL local cock-mail storage?")) return;
+                if(!confirm("Really delete ALL local mailecho storage?")) return;
                 for(const db of await indexedDB.databases()) {
                     await indexedDB.deleteDatabase(db.name);
                 }
@@ -7705,7 +7705,7 @@ class _LogsView extends View {
         const blob_uncompress = new Blob([JSON.stringify(this.getMessages())],{type: 'application/octet-stream'});
         const compression_stream = blob_uncompress.stream().pipeThrough(new CompressionStream('gzip'));
         const compression_response = await new Response(compression_stream);
-        const filename = 'cock-mail ' + now.toLocaleTimeString() + '.json.gz';
+        const filename = 'mailecho ' + now.toLocaleTimeString() + '.json.gz';
 
         return [filename, await compression_response.blob()];
     }
@@ -7717,7 +7717,7 @@ class _LogsView extends View {
             if(!confirm("Log levels NET and above include raw data including messages you sent and downloaded this session. Only IMAP/SMTP passwords are censored. Do you want to do this?")) return;
         }
 
-        var body = `I need help with cock-mail.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n\r\n\r\nI attached a logfile with verbosity ${log_levels[level]}.`;
+        var body = `I need help with mailecho.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n\r\n\r\nI attached a logfile with verbosity ${log_levels[level]}.`;
 
         if(level >= NET) {
             body += " I UNDERSTAND THAT THIS LOG LEVEL INCLUDES NETWORK TRAFFIC FROM THIS SESSION INCLUDING MESSAGES SENT AND RECEIVED, AND THAT ONLY IMAP/SMTP PASSWORDS WERE CENSORED.";
@@ -7728,7 +7728,7 @@ class _LogsView extends View {
         const message = new Message({
             headers: {
                 To: atob(atob('YjJabWFXTnBZV3d0YzNWd2NHOXlkRUJqYjJOckxteHA=')), // not so fast
-                Subject: 'Cock-mail support request'
+                Subject: 'mailecho support request'
             },
             body: body,
             attachments: [{
@@ -7751,12 +7751,12 @@ class _LogsView extends View {
 
 <script data-source="src/js/config.js" type="text/javascript">
 window.config = {
-    // Change this to false. It activates features specific to official cock-mail.
+    // Change this to false. It activates features specific to official mailecho.
     official: true,
     // The EHLO domain is sent during SMTP and sometimes shows up in "Received" headers
-    ehlo: 'cock-mail',
+    ehlo: 'mailecho',
     // Set as the default "User-Agent" header in outgoing mail
-    user_agent: 'Cock-mail/0.5.0',
+    user_agent: 'mailecho/0.5.0',
     // SMTP supports up to 100
     maxrcpt: 25,
     // Number of log messages to retain. Higher = more memory usage

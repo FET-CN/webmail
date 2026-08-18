@@ -27,7 +27,7 @@ class CockmailStorage {
 
     async versionchange(e) {
         await this.db?.close();
-        alert("Database is broken! Either you deleted your browser storage or opened a more recent version of cock-mail in a new tab. Either way I'm gonna GTFO now.");
+        alert("Database is broken! Either you deleted your browser storage or opened a more recent version of mailecho in a new tab. Either way I'm gonna GTFO now.");
         document.body.innerHTML="<h1>I broke!</h1>";
     }
 

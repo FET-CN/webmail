@@ -1,4 +1,4 @@
-# Cock-mail Webmail
+# mailecho Webmail
 
 The deployable `index.html` is generated from the files under `src/`.
 The generated document deliberately keeps each CSS and JavaScript source in

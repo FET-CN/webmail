@@ -1,10 +1,10 @@
 window.config = {
-    // Change this to false. It activates features specific to official cock-mail.
+    // Change this to false. It activates features specific to official mailecho.
     official: true,
     // The EHLO domain is sent during SMTP and sometimes shows up in "Received" headers
-    ehlo: 'cock-mail',
+    ehlo: 'mailecho',
     // Set as the default "User-Agent" header in outgoing mail
-    user_agent: 'Cock-mail/0.5.0',
+    user_agent: 'mailecho/0.5.0',
     // SMTP supports up to 100
     maxrcpt: 25,
     // Number of log messages to retain. Higher = more memory usage

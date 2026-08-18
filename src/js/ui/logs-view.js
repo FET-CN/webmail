@@ -138,7 +138,7 @@ class _LogsView extends View {
         const blob_uncompress = new Blob([JSON.stringify(this.getMessages())],{type: 'application/octet-stream'});
         const compression_stream = blob_uncompress.stream().pipeThrough(new CompressionStream('gzip'));
         const compression_response = await new Response(compression_stream);
-        const filename = 'cock-mail ' + now.toLocaleTimeString() + '.json.gz';
+        const filename = 'mailecho ' + now.toLocaleTimeString() + '.json.gz';
 
         return [filename, await compression_response.blob()];
     }
@@ -150,7 +150,7 @@ class _LogsView extends View {
             if(!confirm("Log levels NET and above include raw data including messages you sent and downloaded this session. Only IMAP/SMTP passwords are censored. Do you want to do this?")) return;
         }
 
-        var body = `I need help with cock-mail.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n\r\n\r\nI attached a logfile with verbosity ${log_levels[level]}.`;
+        var body = `I need help with mailecho.\r\n\r\nWhat I'm trying to do is:\r\n\r\n\r\nThe error I get is:\r\n\r\n\r\nI attached a logfile with verbosity ${log_levels[level]}.`;
 
         if(level >= NET) {
             body += " I UNDERSTAND THAT THIS LOG LEVEL INCLUDES NETWORK TRAFFIC FROM THIS SESSION INCLUDING MESSAGES SENT AND RECEIVED, AND THAT ONLY IMAP/SMTP PASSWORDS WERE CENSORED.";
@@ -161,7 +161,7 @@ class _LogsView extends View {
         const message = new Message({
             headers: {
                 To: atob(atob('YjJabWFXTnBZV3d0YzNWd2NHOXlkRUJqYjJOckxteHA=')), // not so fast
-                Subject: 'Cock-mail support request'
+                Subject: 'mailecho support request'
             },
             body: body,
             attachments: [{

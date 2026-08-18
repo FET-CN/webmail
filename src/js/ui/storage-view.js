@@ -10,7 +10,7 @@ class _StorageView extends View {
         }).bind(this)));
         this.el.querySelectorAll('.deleteall').forEach(e => {
             e.addEventListener('click',async (e) => {
-                if(!confirm("Really delete ALL local cock-mail storage?")) return;
+                if(!confirm("Really delete ALL local mailecho storage?")) return;
                 for(const db of await indexedDB.databases()) {
                     await indexedDB.deleteDatabase(db.name);
                 }
