@@ -61,7 +61,47 @@ binding in deployment.
 
 ## Cloudflare Workers
 
-Deploy `backend/cloudflare/worker.ts` with Wrangler. Bind a KV namespace as
-`SESSION_KV`, configure the production `APP_ORIGIN`, and store `JWT_SECRET`
-as a Wrangler secret. Do not commit the placeholder KV namespace ID in
+### One-click setup
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/FET-CN/webmail/tree/main/backend/cloudflare)
+
+The button imports the Worker configuration from
+`backend/cloudflare/wrangler.toml` into Cloudflare. It is an assisted setup,
+not a credential-free production deploy: complete the binding and secret
+steps below before serving real mail traffic.
+
+### Manual deployment
+
+Run these commands from the repository root:
+
+```sh
+cd backend/cloudflare
+npx wrangler login
+npx wrangler kv namespace create SESSION_KV
+# Replace the placeholder SESSION_KV id in wrangler.toml with the returned id.
+npx wrangler secret put JWT_SECRET
+npx wrangler deploy
+```
+
+`JWT_SECRET` must be a long random value and must never be committed. Set the
+production values for `APP_ORIGIN` and `PROBLEM_TYPE_BASE_URL` in Wrangler
+variables. The latter is the public base URL for RFC 9457 problem type
+documents, for example `https://api.example.com/problems`; do not leave the
+example value in a production deployment.
+
+The Worker also needs network access to the configured Migadu endpoints. The
+default hosts are `imap.migadu.com:993` and `smtp.migadu.com:465`; verify them
+against the Migadu account before deploying. The `SESSION_KV` namespace is
+used for encrypted, TTL-bound session records and refresh-family revocation.
+
+Before deploying, validate the bundle without publishing it:
+
+```sh
+npx wrangler deploy --dry-run
+```
+
+After deployment, verify the Worker URL with an unauthenticated request and
+confirm that it returns an RFC 9457 `AUTH_REQUIRED` response. Then test the
+login flow with a non-production Migadu mailbox before pointing the frontend
+at the Worker URL. Do not commit the placeholder KV namespace ID in
 `wrangler.toml` as a production configuration.
