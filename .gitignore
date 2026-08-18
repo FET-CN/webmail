@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+.local/
+*.sqlite
+*.sqlite-journal

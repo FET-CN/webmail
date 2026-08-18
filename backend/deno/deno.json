@@ -1,0 +1,13 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-env --allow-net --allow-read --watch server.ts",
+    "start": "deno run --allow-env --allow-net --allow-read server.ts",
+    "check": "deno check ../core/*.ts ../protocol/*.ts server.ts",
+    "test": "deno test --allow-env --allow-net ../core ../protocol"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  }
+}

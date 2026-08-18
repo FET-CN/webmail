@@ -1,0 +1,20 @@
+name = "mailecho-api"
+main = "worker.ts"
+compatibility_date = "2026-08-19"
+
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "replace-with-production-kv-id"
+
+[vars]
+APP_ORIGIN = "https://mail.example.com"
+PROBLEM_TYPE_BASE_URL = "https://api.example.com/problems"
+JWT_ACCESS_TTL_SECONDS = "900"
+JWT_REFRESH_TTL_SECONDS = "2592000"
+SESSION_TTL_SECONDS = "2592000"
+MIGADU_IMAP_HOST = "imap.migadu.com"
+MIGADU_IMAP_PORT = "993"
+MIGADU_SMTP_HOST = "smtp.migadu.com"
+MIGADU_SMTP_PORT = "465"
+MAX_MESSAGE_BYTES = "10485760"
+MAX_RECIPIENTS = "25"
