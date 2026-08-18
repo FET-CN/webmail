@@ -63,19 +63,21 @@ binding in deployment.
 
 ### One-click setup
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/FET-CN/webmail/tree/main/backend/cloudflare)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/FET-CN/webmail/tree/main/backend)
 
 The button imports the Worker configuration from
-`backend/cloudflare/wrangler.toml` into Cloudflare. It is an assisted setup,
-not a credential-free production deploy: complete the binding and secret
-steps below before serving real mail traffic.
+`backend/wrangler.toml` into Cloudflare. The full `backend` directory is the
+deployment root because the Worker imports the shared `core`, `contract`, and
+`protocol` modules. It is an assisted setup, not a credential-free production
+deploy: complete the binding and secret steps below before serving real mail
+traffic.
 
 ### Manual deployment
 
 Run these commands from the repository root:
 
 ```sh
-cd backend/cloudflare
+cd backend
 npx wrangler login
 npx wrangler kv namespace create SESSION_KV
 # Replace the placeholder SESSION_KV id in wrangler.toml with the returned id.

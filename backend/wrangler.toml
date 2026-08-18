@@ -1,5 +1,5 @@
 name = "mailecho-api"
-main = "worker.ts"
+main = "cloudflare/worker.ts"
 compatibility_date = "2026-08-19"
 
 [[kv_namespaces]]
