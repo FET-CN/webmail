@@ -3,7 +3,9 @@ async function init() {
 
     const init = document.querySelector('#init');
     const initmsg = init.querySelector('.message');
-    const needs_migrate = Object.keys(localStorage).length;
+    const needs_migrate = Object.keys(localStorage).some(key =>
+        isLegacyMailboxKey(key)
+    );
 
     window.GlobalStorage = new GlobalStorage();
     window.CockmailSettings = new CockmailSettings();

@@ -120,6 +120,40 @@ class CockmailStorage {
     }
 }
 
+// Legacy localStorage entries are user-controlled data and may be empty or
+// partially written (for example after a tab is closed during a write).
+// Keep parsing guarded so one bad entry cannot prevent the application from
+// opening its IndexedDB stores.
+function parseLegacyStorageValue(rawValue) {
+    if(typeof rawValue !== 'string' || rawValue.trim() === '') {
+        return {ok: false, reason: 'empty'};
+    }
+
+    try {
+        const value = JSON.parse(rawValue);
+        if(!value || typeof value !== 'object' || Array.isArray(value)) {
+            return {ok: false, reason: 'not-an-object'};
+        }
+        return {ok: true, value: value};
+    } catch(error) {
+        return {ok: false, reason: 'invalid-json', error: error};
+    }
+}
+
+function reportLegacyStorageIssue(key, result) {
+    const message = `Skipping invalid legacy storage entry: ${key} (${result.reason})`;
+    if(typeof log === 'function') {
+        const warningLevel = typeof WARN === 'number' ? WARN : 2;
+        log('storage', message, warningLevel, result.error);
+    } else {
+        console.warn(message, result.error);
+    }
+}
+
+function isLegacyMailboxKey(key) {
+    return /^(?:[0-9a-f]{2})+$/i.test(key);
+}
+
 class GlobalStorage extends CockmailStorage {
     async upgrade(e) {
         const tx = e.target.transaction;
@@ -130,17 +164,27 @@ class GlobalStorage extends CockmailStorage {
                 const accounts = this.db.createObjectStore('accounts');
                 const lsKeys = Object.keys(localStorage);
                 if(lsKeys.includes('cock-mail-settings')) {
-                    const lsSettings = JSON.parse(localStorage.getItem('cock-mail-settings'));
-                    for(const key of Object.keys(lsSettings)) {
-                        settings.put(lsSettings[key], key);
+                    const key = 'cock-mail-settings';
+                    const parsed = parseLegacyStorageValue(localStorage.getItem(key));
+                    if(parsed.ok) {
+                        for(const setting of Object.keys(parsed.value)) {
+                            settings.put(parsed.value[setting], setting);
+                        }
+                    } else {
+                        reportLegacyStorageIssue(key, parsed);
                     }
-                    localStorage.removeItem('cock-mail-settings');
+                    localStorage.removeItem(key);
                 }
                 if(lsKeys.includes('cock-mail-accounts')) {
-                    const lsSettings = JSON.parse(localStorage.getItem('cock-mail-accounts'));
-                    for(const username of Object.keys(lsSettings))
-                        accounts.put(lsSettings[username],username);
-                    localStorage.removeItem('cock-mail-accounts');
+                    const key = 'cock-mail-accounts';
+                    const parsed = parseLegacyStorageValue(localStorage.getItem(key));
+                    if(parsed.ok) {
+                        for(const username of Object.keys(parsed.value))
+                            accounts.put(parsed.value[username],username);
+                    } else {
+                        reportLegacyStorageIssue(key, parsed);
+                    }
+                    localStorage.removeItem(key);
                 }
                 break;
         }
