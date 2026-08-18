@@ -11,9 +11,10 @@ window.config = {
     log_messages: 2000,
     // Log level to output to developer console. -1 to disable
     log_level_console: WARN,
-    // Default websocket endpoints: /imap and /smtp on current host
-    imap_server: (window.location.protocol === "http:" ? "ws://" : "wss://") + window.location.host + "/imap",
-    smtp_server: (window.location.protocol === "http:" ? "ws://" : "wss://") + window.location.host + "/smtp"
+    // Raw protocol sockets are exposed under the versioned backend prefix.
+    imap_server: (window.location.protocol === "http:" ? "ws://" : "wss://") + window.location.host + "/v1/imap",
+    smtp_server: (window.location.protocol === "http:" ? "ws://" : "wss://") + window.location.host + "/v1/smtp",
+    events_server: (window.location.protocol === "http:" ? "ws://" : "wss://") + window.location.host + "/v1/events"
     //imap_server: 'wss://example.com/path/to/imap',
     //smtp_server: 'wss://example.com/path/to/smtp'
 };
