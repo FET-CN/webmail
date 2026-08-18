@@ -1,0 +1,195 @@
+/*                                                      mailbox_panel */
+.mailbox_panel {
+    order: 200;
+    max-width: 25%;
+    /*width: 25%;*/
+}
+
+.mailbox_panel header {
+    position: sticky;
+    top: 0;
+    background: var(--background);
+}
+.mailbox_panel .mailbox_name {
+    display: inline-block;
+    font-size: large;
+    margin: 0;
+    float: left;
+}
+.mailbox_panel .message_count, .mailbox_panel nav i {
+    display: inline-block;
+    float: right;
+    margin-left: 0.5em;
+}
+
+.mailbox_panel nav {
+    margin-bottom: 0.25em;
+    padding: 0.5em;
+    background: var(--nav-background);
+}
+.mailbox_panel nav > a + a {
+    margin-left: 0.5em;
+    padding-left: 0.5em;
+    border-left: 1px solid #bbb;
+}
+.mailbox_panel .message_controls {
+    background: var(--nav2-background);
+}
+.mailbox_panel .message_controls a {
+    display: inline-block;
+}
+.mailbox_panel .message_controls i {
+}
+.mailbox_panel .message {
+    background: var(--mailbox-message-background);
+    color: 000;
+    border-bottom: 4px solid #000;
+    padding: 0.5em;
+    cursor: pointer;
+    box-sizing: border-box;
+    font-size: 0.8em;
+}
+.mailbox_panel .message[data-open=true] {
+    border: 3px solid #339;
+    margin-left: 0.5em;
+}
+
+.mailbox_panel .message:has(input:checked) {
+    background: var(--mailbox-message-checked-background);
+}
+.mailbox_panel .message[data-flags*=_Seen]:has(input:checked) {
+    background: var(--mailbox-message-checked-seen-background);
+}
+.mailbox_panel .message[data-flags*=_Seen] {
+    background: var(--mailbox-message-seen-background);
+}
+
+.mailbox_panel .message[data-flags*=_Flagged] {
+    border: 2px solid #E8B00B; /* lol boob */
+}
+
+.mailbox_panel .message .subject {
+    font-weight: bold;
+    font-size: 1.25em;
+}
+.mailbox_panel .message[data-flags*=_Seen] .subject {
+    font-size: 1em;
+}
+
+.mailbox_panel .message .date,
+.mailbox_panel .message .from {
+    padding-left: 0.5ch;
+}
+
+.mailbox_panel .message .from_header {
+}
+.mailbox_panel .message .from {
+    font-weight: normal;
+}
+
+.mailbox_panel .message .date_header {
+    display: inline-block;
+    padding-left: 0.5em;
+    font-size: 0.75em;
+}
+.mailbox_panel .message .date {
+    font-weight: normal;
+}
+
+.mailbox_panel header {
+    margin: 0;
+    word-break: break-all;
+    overflow: hidden;
+}
+
+/*                                                      message_panel */
+
+.message_panel {
+    order: 300;
+}
+
+.message_panel .raw_headers,
+.message_panel .raw_body,
+.message_panel .body,
+.message_panel .text {
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-wrap: anywhere;
+}
+
+.message_panel .subject {
+    font-size: 1.25em;
+}
+
+.message_panel .subject,
+.message_panel .from_header,
+.message_panel .to_header,
+.message_panel .cc_header,
+.message_panel .bcc_header,
+.message_panel .date_header {
+    font-weight: bold;
+}
+.message_panel .from,
+.message_panel .to,
+.message_panel .cc,
+.message_panel .bcc,
+.message_panel .date {
+    font-weight: normal;
+}
+
+.message_panel .inline, .message_panel .attachment {
+    margin-top: 1em;
+    margin-bottom: 1em;
+}
+
+.message_panel img, .message_panel video {
+    display: block;
+    max-width: 100%;
+}
+
+.message_panel ul li a {
+    padding-right: 0.5em;
+}
+.message_panel ul li a + a {
+    padding-left: 0.5em;
+    border-left: 1px solid #FFF;
+}
+
+/*                                                      compose_panel */
+
+.compose_panel {
+    order: 300;
+}
+
+.compose_panel table {
+    width: 100%;
+}
+.compose_panel .rcpts {
+    max-width: min-content;
+}
+.compose_panel th {
+    width: 1px;
+    text-align: left;
+}
+.compose_panel input {
+    width: 100%;
+}
+.compose_panel .response {
+    display: none;
+    padding: 0.5em;
+    margin-bottom: 0.5em;
+}
+.compose_panel .response.load {
+    background-color: #A77D19;
+}
+.compose_panel .response.err {
+    background-color: #C00505;
+}
+.compose_panel .response.success {
+    background-color: #2B9216;
+}
+.compose_panel textarea {
+    width: 50em;
+    height: 30em;
+    font-family: monospace;
+}

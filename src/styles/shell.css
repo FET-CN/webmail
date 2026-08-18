@@ -1,0 +1,184 @@
+/*                                                      media */
+
+@media( max-width: 60ch ) {
+    .login_panel {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .account_panel {
+        max-width: 20ch !important;
+    }
+
+    .mailbox_panel {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .compose_panel textarea {
+        width: 100% !important;
+    }
+}
+
+@media( (max-width: 100ch) and (min-width: 60ch) ) {
+    .account_panel {
+        width: 20% !important;
+        max-width: 20% !important;
+    }
+
+    .mailbox_panel {
+        width: 80% !important;
+        max-width: 80% !important;
+    }
+    .account_panel, .mailbox_panel {
+        padding-left: 1ch !important;
+        padding-right: 1ch !important;
+    }
+}
+
+@media( max-width: 100ch ) {
+    body {
+        display: block !important;
+    }
+
+    .login_panel {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .account_panel, .mailbox_panel {
+        margin-right: 0 !important;
+        padding-right: 1em !important;
+    }
+
+    .message_panel, .compose_panel {
+        padding-left: 0.5em !important;
+        padding-bottom: 50vh !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .mailbox_panel {
+        max-height: 50vh !important;
+    }
+}
+
+/*                                                      shared */
+
+.login_panel, .account_panel, .mailbox_panel, .message_panel, .compose_panel {
+    display: inline-block;
+}
+.account_panel, .mailbox_panel, .message_panel, .compose_panel {
+    vertical-align: top;
+    overflow: auto;
+    padding-bottom: 3em;
+    box-sizing: border-box;
+    margin-top: 1em;
+}
+.message_panel, .compose_panel {
+    max-width: 58%;
+    padding-left: 1em;
+}
+.message_panel nav, .compose_panel nav {
+    padding: 0.5em;
+    background: var(--nav-background);
+}
+.message_panel nav > a + a, .compose_panel nav > a + a {
+    margin-left: 0.5em;
+    padding-left: 0.5em;
+    border-left: 1px solid #bbb;
+}
+.message_panel header, .compose_panel header {
+    padding: 0.5em;
+    margin-bottom: 0.5em;
+    background: var(--message-header-background);
+    border-bottom: 2px solid #000;
+}
+
+/*                                                      login_panel */
+.login_panel {
+    margin: 0 auto;
+    height: fit-content;
+    padding-bottom: 2em;
+}
+
+.login_panel > h1 {
+    text-align: center;
+}
+.login_panel > h2 {
+    font-size: large;
+    text-align:center;
+    font-weight: bold;
+    color: var(--announce-color);
+}
+.login_panel > h2 a {
+    color: var(--announce-color-accent);
+    font-weight: bolder;
+}
+.login_panel table, .prompt table {
+    margin: 0 auto;
+}
+.login_panel table th, .prompt table th {
+    text-align: left;
+    padding-right:1em;
+}
+
+.account_list li {
+    cursor: pointer;
+    color: var(--link-color);
+    display: block;
+    background: var(--account-list-background);
+    padding: 0.5em 1em;
+    margin-bottom: 0.5em;
+}
+.account_list li.no_accounts {
+    cursor: auto;
+}
+.account_list li a {
+    float:right;
+}
+
+#noscript {
+    display: none;
+    margin: 3em 2em;
+}
+
+/*                                                      account_panel */
+
+.account_panel {
+    order: 100;
+    max-width: 15%;
+    margin-right: 1em;
+}
+.account_panel p {
+    margin: 0.25em 1em;
+    font-style:italic;
+}
+.account_panel ul {
+    padding-left: 1em;
+    margin-top: 0.2em;
+    margin-bottom: 0.2em;
+}
+.account_panel p, .account_panel li {
+    word-break: break-all;
+}
+
+.account_panel a {
+    display: block;
+}
+
+.account_panel .mailbox_list a {
+    display: inline;
+}
+
+.account_panel .unread:not(:empty) {
+    font-size: smaller;
+    margin-left: 1ch;
+    padding: 0.25em;
+    background: var(--status-background);
+    border-radius: 0.5em;
+}
+
+.account_panel a + a, .account_panel li + li {
+    margin-top: 0.3em;
+}

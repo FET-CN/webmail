@@ -1,0 +1,187 @@
+/*                                                      status */
+
+#status {
+    z-index: 10000;
+    display:none;
+    position:fixed;
+    bottom:0;
+    left:0;
+    width:100%;
+    background: var(--status-background);
+    color: var(--status-color);
+}
+#status p, #status label {
+    float:left;
+    padding-left: 1em;
+    display:inline-block;
+}
+#status p, #notify_status, #idle_status, #status label, #status-data {
+    font-family: monospace;
+    padding-top: 0.2em;
+    margin: 0.5em;
+}
+#status_color {
+    display: inline-block;
+    float:right;
+    width: 2em;
+    height: 2em;
+}
+#notify_status, #idle_status {
+    display: none;
+    float:right;
+    margin: 0.5em;
+    margin-right: 1em;
+}
+#notify_status.notifying, #idle_status.idling {
+    display:inline-block;
+}
+
+#status-data-toggle ~ #status-data {
+    display: none;
+    clear: both;
+    background: rgba(255,0,0,0.2);
+    padding: 1em;
+    margin: 0.5em 0 0 0;
+}
+
+#status-data-toggle:checked ~ #status-data {
+    display: block;
+}
+
+#status_color.OK { background: var(--status-ok-color); }
+#status_color.LOAD { background: var(--status-load-color); }
+#status_color.ERR,#status_color.DISC { background: var(--status-err-color); }
+
+/*                                                      prompt */
+
+.prompt {
+    position: fixed;
+    top:0;
+    left:50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 9000px rgba(0,0,0,0.4);
+    z-index:1000;
+    background: var(--account-list-background);
+    padding: 2em;
+    width: max-content;
+    max-width: 90%;
+    max-height: 100%;
+    overflow-y: scroll;
+}
+
+.prompt h1 {
+    font-size: 1.5em;
+}
+
+.input-prompt {
+    max-width: 60ch;
+}
+
+.input-prompt input[type=text] {
+    width: 100%;
+}
+
+/*                                                      settings */
+.prompt.settings input[type=text],
+.prompt.settings textarea {
+    width: 30rem;
+}
+
+.prompt.settings textarea {
+    height: 6em
+}
+
+/*                                                      manage mailboxes */
+.mailbox-manage {
+    min-width: 40ch;
+}
+
+.mailbox-manage .mailbox {
+    padding: 0.5em 0 0.5em 0.5em;
+    margin: 0.5em 0;
+}
+
+.mailbox-manage .mailbox.first {
+    background-color: #222;
+}
+
+.mailbox-manage .mailbox.second {
+    background-color: rgba(255,255,255,0.2);
+}
+.mailbox-manage .actions {
+    padding: 0 0.5em 0 1em;
+    display: inline-block;
+    float:right;
+}
+
+/*                                                      logs */
+
+.prompt.logs {
+    width: 100%;
+    max-height: 90%;
+    overflow: hidden;
+}
+
+.logs-prompt {
+}
+
+.logs-prompt .logs-container {
+    max-height: 50vh;
+    overflow: scroll;
+    font-family: monospace;
+}
+
+.logs-prompt .message {
+    white-space: pre-wrap;
+}
+
+.logs-prompt tr {
+    background-color: #222;
+}
+
+.logs-prompt tr + tr {
+    border-top: 1px solid #CCC;
+}
+
+.logs-prompt td {
+    padding: 0.25em 1ch;
+    vertical-align: bottom;
+}
+
+.logs-prompt .time,
+.logs-prompt .data {
+    white-space: nowrap;
+}
+
+/*                                                      extras */
+
+#init {
+    margin-top: 2em;
+    margin-left: auto;
+    margin-right: auto;
+    padding-bottom: 2em;
+    height: fit-content
+}
+
+#flashbang {
+    display: none;
+    pointer-events: none;
+    position:fixed;
+    top:0; left:0;
+    width: 100%; height: 100%;
+    z-index: 10000000;
+}
+
+@keyframes flash {
+    from {
+        background-color: rgba(255,255,255,255);
+    }
+    to {
+        background-color: rgba(255,255,255,0);
+    }
+}
+
+.flash {
+    display: block !important;
+    animation: flash 90s cubic-bezier(.18,.05,.48,.99);
+}

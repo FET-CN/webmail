@@ -1,0 +1,467 @@
+<div class="templates hidden">
+    <template id=t-login>
+        <div class=login_panel>
+            <h1>Log-in to Cock-mail</h1>
+            <h2 class=official><a href=/cock-mail/>Visit the Project Page</a></h2>
+            <div class=login_form><!-- t-login_form --></div>
+            Known accounts:
+            <ul class=account_list><!-- t-login-account_list{,_empty} --></ul>
+            <nav>
+                <a class=managestorage>Manage Storage</a>
+            </nav>
+            <pre class=login_notes>
+            </pre>
+        </div>
+    </template>
+
+    <template id=t-login-account_list>
+        <li class=entry>
+            <span class=username>test</span>
+            <a class=delete>Delete</a>
+        </li>
+    </template>
+
+    <template id=t-login-account_list_empty>
+        <li class="entry no_accounts">No saved accounts</li>
+    </template>
+
+    <template id=t-login_form>
+        <form method=POST onsubmit="return false;">
+            <table>
+                <tr>
+                    <th>Username</th>
+                    <td><input name=username placeholder="example-test@cock.li"></td>
+                </tr>
+                <tr>
+                    <th>Password</th>
+                    <td><input type=password name=password></td>
+                </tr>
+                <tr>
+                    <th>Save Password</th>
+                    <td>
+                        <select name=save_password>
+                            <option value=never selected>Never</option>
+                            <option value=session>For This Session</option>
+                            <option value=save>Save to Browser</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th></th>
+                    <td><input type=submit value="Log In"></td>
+                </tr>
+            </table>
+        </form>
+    </template>
+
+    <template id=t-account>
+        <div class=account_panel>
+            <div class="account_status onlyloggedin hidden">
+                Logged in as:
+            </div>
+            <div class="account_status loading">
+                Loading...
+            </div>
+            <div class="onlyloggedin hidden">
+                <i class=username></i>
+                <hr>
+                <a class=compose>Compose</a>
+                <hr>
+                <label>Mailboxes:</label>
+                <div class=mailboxes><!-- t-account-mailbox-list{,_empty} --></div>
+                <hr>
+                <a class=manage>Manage Mailboxes</a>
+                <hr>
+                <a class=settings>Settings</a>
+                <a class=reconnect>Reconnect</a>
+                <a class=disconnect>Disconnect</a>
+                <a class=logout>Log Out</a>
+                <div class=official>
+                    <hr>
+                    <a class=lightmode>Light Mode</a>
+                    <a class=support>Support</a>
+                </div>
+                <hr>
+                <a class=logs>View Logs</a>
+            </div>
+        </div>
+    </template>
+
+    <template id=t-account-mailbox-list>
+        <ul class="mailbox_list"><!-- t-account-mailbox-list{,_empty} --></ul>
+    </template>
+
+    <template id=t-account-mailbox>
+        <li class=mailbox><a class=mailbox_name data-ref=link></a><span class=unread></span></li>
+    </template>
+
+    <template id=t-account-mailbox-list_empty>
+        <div class=content>
+            None
+        </div>
+    </template>
+
+    <template id='t-mailbox'>
+        <div class=mailbox_panel>
+            <header>
+                <h1 class=mailbox_name data-ref=mailbox_name></h1>
+                <i class=message_count data-ref=message_count></i>
+                <div style="clear: both;"></div>
+                <nav class=mailbox_controls>
+                    <a class=selectall data-ref=selectall title="Select all messages">Select all</a>
+                    <a class=refresh data-ref=refresh title="Check mailbox for updates. Not needed when idling except to refresh message flags.">Refresh</a>
+                    <a class=rebuild data-ref=rebuild title="Delete cached messages and re-fetch headrs from the server.">Rebuild</a>
+                </nav>
+                <nav class="message_controls hidden" data-ref=message_controls>
+                    <a class=cancel data-ref=cancel>Cancel</a>
+                    <select class=mark data-ref=mark>
+                        <option value=0 class=title disabled selected>Mark</option>
+                        <option data-flag="\Seen" data-action="add">Read</option>
+                        <option data-flag="\Seen" data-action="remove">Unread</option>
+                        <option data-flag="\Flagged" data-action="add">Flagged</option>
+                        <option data-flag="\Flagged" data-action="remove">Unflagged</option>
+                        <option data-flag="\Deleted" data-action="add">Delete</option>
+                    </select>
+                    <select class="copy mailbox-list" data-ref=copy>
+                        <option value=0 class=title disabled selected>Copy</option>
+                        <!-- t-mailbox-select -->
+                    </select>
+                    <select class="move mailbox-list" data-ref=move>
+                        <option value=0 class=title disabled selected>Move</option>
+                        <!-- t-mailbox-select -->
+                    </select>
+                    <i class=selectedcount data-ref=selectedcount></i>
+                    <div style="clear: both;"></div>
+                </nav>
+            </header>
+            <div class=mailbox_status data-ref=mailbox_status></div>
+            <div class=message_list data-ref=message_list><!-- t-mailbox-message --></div>
+        </div>
+    </template>
+
+    <template id=t-mailbox-select>
+        <option></option>
+    </template>
+
+    <template id=t-mailbox-message>
+        <div class=message>
+            <div class=subject data-ref=subject></div>
+            <div class=from_header data-ref=from>From: <span class=from></span></div>
+            <input type=checkbox data-ref=checkbox>
+            <div class=date_header data-ref=date>Date: <time class=date></time></div>
+        </div>
+    </template>
+
+    <template id=t-message>
+        <div class=message_panel>
+            <nav>
+                <a class=replylist>Reply List</a>
+                <a class=reply>Reply</a>
+                <a class=replyall>Reply All</a>
+                <a class=forward>Forward</a>
+                <select class=mark>
+                    <option value=0 class=title disabled selected>Mark</option>
+                    <option data-flag="\Seen" data-action="add">Read</option>
+                    <option data-flag="\Seen" data-action="remove">Unread</option>
+                    <option data-flag="\Flagged" data-action="add">Flagged</option>
+                    <option data-flag="\Flagged" data-action="remove">Unflagged</option>
+                    <option data-flag="\Deleted" data-action="add">Delete</option>
+                </select>
+                <select class="copy mailbox-list">
+                    <option value=0 class=title disabled selected>Copy</option>
+                    <!-- t-mailbox-select -->
+                </select>
+                <select class="move mailbox-list">
+                    <option value=0 class=title disabled selected>Move</option>
+                    <!-- t-mailbox-select -->
+                </select>
+                <select class=more>
+                    <option value=0 class=title disabled selected>More...</option>
+                    <option value=toggleheaders>Toggle Headers</option>
+                    <option value=viewsource>View Source</option>
+                    <option value=download>Download</option>
+                </select>
+            </nav>
+            <!-- t-message-message -->
+        </div>
+    </template>
+
+    <template id=t-message-message>
+        <article>
+            <header class=headers>
+                <div class=subject></div>
+                <div class=from_header>From:&nbsp;<span class=from></span></div>
+                <div class=to_header>To:&nbsp;<span class=to></span></div>
+                <div class="cc_header hidden">CC:&nbsp;<span class=cc></span></div>
+                <div class="bcc_header hidden">BCC:&nbsp;<span class=bcc></span></div>
+                <div class=date_header>Date:&nbsp;<time class=date></time></div>
+            </header>
+            <pre class="raw_headers hidden"></pre>
+            <pre class="raw_body hidden"></pre>
+
+            <div class=loading>Loading...</div>
+            <div class=body><!-- t-message-inline --></div>
+
+            <div class="attachments hidden">
+                <hr>
+                Attachments <span class=attachmentcount></span>:
+                <ol class=attachment_list>
+                    <!-- t-message-attachment -->
+                </ol>
+            </div>
+        </article>
+    </template>
+
+    <template id=t-message-inline>
+        <section class=inline>
+            <div class=content><!-- t-message-{text,image,video,message} --></div>
+        </section>
+    </template>
+
+    <template id=t-message-attachment>
+        <li class=attachment>
+            <div class=type_header>Type:&nbsp;<span class=type></span></div>
+            <div class=filename_header>Filename:&nbsp;<span class=filename></span></div>
+            <div class=size_header>Size:&nbsp;<span class=attachmentsize></span></div>
+            <a class=download>Download Attachment</a>&nbsp;
+            <a class=view>View</a>
+            <div class="content hidden"><!-- t-message-{text,image,video,message} --></div>
+        </li>
+    </template>
+
+    <template id=t-message-text>
+        <div class=text></div>
+    </template>
+
+    <template id=t-message-image>
+        <img />
+    </template>
+
+    <template id=t-message-video>
+        <video></video>
+    </template>
+
+    <template id=t-compose>
+        <div class=compose_panel>
+            <nav>
+                <a class=send title="Send the message [Ctrl+Enter]">Send</a>
+                <a class=cancel>Cancel</a>
+            </nav>
+            <header>
+                <table>
+                    <tr>
+                        <td class=rcpts colspan=2>
+                            Recipients(<span class=rcptcount>0</span>):&nbsp;<span class=rcptlist></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>From:</th>
+                        <td><input name=from></td>
+                    </tr>
+                    <tr>
+                        <th>To:</th>
+                        <td><input name=to></td>
+                    </tr>
+                    <tr>
+                        <th>CC:</th>
+                        <td><input name=cc></td>
+                    </tr>
+                    <tr>
+                        <th>BCC:</th>
+                        <td><input name=bcc></td>
+                    </tr>
+                    <tr>
+                        <th>Subject:</th>
+                        <td><input name=subject></td>
+                    </tr>
+                </table>
+            </header>
+            <div class=response></div>
+            <textarea name=body></textarea>
+            <div>
+                Attachments:&nbsp;
+                <input type=file multiple class=hidden id=compose-add-attachment />
+                <button class=add-attachments>Add Attachment</button>
+            </div>
+            <ol class=attachments><!-- t-compose-attachment --></ol>
+        </div>
+    </template>
+
+    <template id=t-compose-attachment>
+        <li class=attachment>
+            <div class=filename_header>Filename:&nbsp;<span class=filename></span></div>
+            <div class=type_header>Type:&nbsp;<span class=type></span></div>
+            <div class=size_header>Size:&nbsp;<span class=size></span></div>
+            <a class=delete>Delete Attachment</a>
+        </li>
+    </template>
+
+    <template id=t-prompt>
+        <div class=prompt>
+            <h1 class=title></h1>
+            <a class=close>Close</a>
+            <!-- t-{password,settings,storage,logs,input}-prompt -->
+        </div>
+    </template>
+
+    <template id=t-logs-prompt>
+        <div class=logs-prompt>
+            <p>
+                Log level:&nbsp;<input name=verbosity type=range />&nbsp;<span class=verbosity></span>
+                <div>
+                    <input type=checkbox id=live-logs />&nbsp;<label for=live-logs>Live update logs</label>
+                </div>
+            </p>
+            <p>
+                <a class=download>Download</a>&nbsp;|&nbsp;<a class=copy>Copy</a><span class=official>&nbsp;|&nbsp;<a class=sendsupport>Send to Support</a></span>
+            </p>
+            <div class=logs-container>
+                <table>
+                    <tr class=header>
+                        <th>Time</th>
+                        <th>Level</th>
+                        <th>Source</th>
+                        <th>Message</th>
+                        <th>Data</th>
+                    </tr>
+                    <!-- t-logs-entry -->
+                </table>
+            </div>
+    </template>
+
+    <template id=t-logs-entry>
+        <tr class=logitem>
+            <td class=time></td>
+            <td class=level></td>
+            <td class=source></td>
+            <td><div class=message></div></td>
+            <td class=data><a title='Sets a variable "temp" for inspection in dev console' class=hidden>Set Var</a></td>
+        </tr>
+    </template>
+
+    <template id=t-input-prompt>
+        <form class=input-prompt>
+            <p class=text></p>
+            <input type=text />
+            <input type=submit value=Submit />
+        </form>
+    </template>
+
+    <template id=t-password-prompt>
+        <div class=content>
+            <p>
+                Since you did not save your password ("For Session", or "To Browser"), you must re-enter it in order to continue.
+            </p>
+            <br />
+            <!-- t-login_form -->
+        </div>
+    </template>
+
+    <template id=t-settings-prompt>
+        <div class=content>
+            <p>All settings save automatically.</p>
+            <hr>
+            <h2>Global Settings</h2>
+            <input type=checkbox id=settings-notifications>
+            <label for=settings-notifications>
+                Show notifications on new mail (if supported)
+            </label>
+            <br>
+            <input type=checkbox id=settings-renderMedia>
+            <label for=settings-renderMedia>
+                Render media like images and video. Disable this to harden against browser exploits. Remote content is NEVER loaded regardless of this option.
+            </label>
+            <hr>
+            <h2>Account Settings</h2>
+            <table>
+                <tr>
+                    <th>Reply At</th>
+                    <td>
+                        <select id=settings-account-replyAt>
+                            <option value=top>Top</option>
+                            <option value=bottom>Bottom</option>
+                        </select>
+                    </td>
+                </tr>
+                <tr>
+                    <th>Name</th>
+                    <td><input type=text id=settings-account-name placeholder="Put in the From: header" /></td>
+                </tr>
+                <tr>
+                    <th>Signature</th>
+                    <td><textarea id=settings-account-signature></textarea></td>
+                </tr>
+                <tr>
+                    <th>Signature on Replies</th>
+                    <td>
+                        <input type=checkbox id=settings-account-replySignature />
+                    </td>
+                </tr>
+                <tr>
+                    <th>User Agent</th>
+                    <td>
+                        Set as the "User-Agent" header on outgoing mail. Blank to disable.
+                        <br />
+                        <input type=text id=settings-account-userAgent />
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </template>
+
+    <template id=t-storage-prompt>
+        <div class=content>
+            <p>
+                Cock-mail saves your messages, settings, and optionally login details to your browser's storage. You can delete that storage here.
+            </p>
+            <p>
+                <strong>CAUTION</strong>: If you delete the global store, cock-mail will break until you refresh. If you clicked "Log Out" and delete a store you previously opened, the same thing happens.
+            </p>
+            <p class="storage hidden">
+                Storage used: <span class=storageused></span>
+            </p>
+            <hr>
+            <a class=deleteall>Delete ALL</a>&nbsp;mailboxes, settings, and accounts
+            <h4>Saved Accounts and Global Settings</h4>
+            <ul class=globalstores><!-- t-storage-store --></ul>
+            <h4>Account Settings</h4>
+            <ul class=accountstores><!-- t-storage-store --></ul>
+            <h4>Mailboxes</h4>
+            <ul class=mailboxstores><!-- t-storage-store --></ul>
+        </div>
+    </template>
+
+    <template id=t-storage-store>
+                <li class=store>
+                    <a class=delete>Delete</a>&nbsp;<a class=store></a>
+                </li>
+    </template>
+
+    <template id=t-mailbox-manage-prompt>
+        <div class=content>
+            <p>
+                To move a mailbox, including in and out of a parent folder, rename it.
+            <p>
+                <a class=create>Create Mailbox</a>
+            </p>
+            <h2>Mailboxes</h2>
+            <div class=mailboxes><!-- t-mailbox-manage-mailbox-list --></div>
+        </div>
+    </template>
+
+    <template id=t-mailbox-manage-mailbox-list>
+        <ol class=mailbox_list><!-- t-mailbox-manage-mailbox --></ol>
+    </template>
+
+    <template id=t-mailbox-manage-mailbox>
+        <li class=mailbox>
+            <div class=actions>
+                <a class=moveup>Move Up</a>&nbsp;
+                <a class=movedown>Move Down</a>&nbsp;
+                <a class=rename>Rename</a>&nbsp;
+                <a class=delete>Delete</a>
+            </div>
+            <span class=mailbox_name></span>
+        </li>
+    </template>
+</div>

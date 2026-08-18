@@ -1,0 +1,86 @@
+/*                                                      root */
+::-webkit-scrollbar {
+    width: 3px;
+    background: rgba(0,0,0,0);
+}
+::-webkit-scrollbar-thumb {
+    background: #BBB;
+}
+:root {
+    --background: #222;
+    --text-color: #FAFAFA;
+    --link-color: #FFF;
+
+    --announce-color: #00B400;
+    --announce-color-accent: #6EE66E;
+    --account-list-background: #111;
+
+    --nav-background: #2D2D2D;
+    --nav2-background: #336621;
+
+    --mailbox-message-background: #DEDEDE;
+    --mailbox-message-seen-background: #A0A0A0;
+    --mailbox-message-checked-background: #FFDA84;
+    --mailbox-message-checked-seen-background: #FFEEC8;
+
+    --message-header-background: #444;
+
+    --status-color: #FFF;
+    --status-background: #336;
+    --status-ok-color: #00FF00;
+    --status-load-color: #FFFF00;
+    --status-err-color: #FF0000;
+}
+
+body {
+    background: var(--background);
+    font-family: sans-serif;
+    color: var(--text-color);
+    display: flex;
+    flex-direction: row;
+    align-items:stretch;
+    height: 100%;
+    margin: 0;
+}
+
+/*                                                      global */
+h1 span, h2 span, h3 span, h4 span, h5 span, h6 span {
+    font-weight: normal;
+}
+a {
+    cursor: pointer;
+    text-decoration: underline;
+    color: var(--link-color);
+}
+
+.disabled {
+    cursor: auto;
+    font-style: italic;
+    text-decoration: none;
+    color: #CCC;
+}
+input:disabled {
+    background-color: #DDD;
+}
+
+.hidden { display: none !important; }
+
+nav > select {
+    border: 0;
+    border-left: 1px solid #BBB;
+    margin-left: 0.5em;
+    padding-left: 0.5em;
+    background: rgba(0,0,0,0);
+    max-width: 8ch;
+    color: var(--link-color);
+    font-size: 1rem;
+    text-decoration: underline;
+}
+
+nav > select > option {
+    text-decoration: underline;
+}
+
+option {
+    background: #36363a;
+}
