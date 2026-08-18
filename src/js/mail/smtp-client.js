@@ -73,8 +73,8 @@ class SmtpClient {
             throw "No recipients!";
         }
 
-        if(rcpts.length > this.rcptmax) {
-            throw `Too many recipients: ${rcpts.length} / ${this.rcptmax}`;
+        if(rcpts.length > this.maxrcpt) {
+            throw `Too many recipients: ${rcpts.length} / ${this.maxrcpt}`;
         }
 
         const bcc = message.headers.get('bcc');

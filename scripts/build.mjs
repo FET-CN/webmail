@@ -91,19 +91,27 @@ function writeDocument(document) {
     fs.renameSync(temporaryPath, outputPath);
 }
 
-const isCheck = process.argv.includes('--check');
-const rendered = renderDocument();
-const outputPath = path.join(ROOT, 'index.html');
+function run() {
+    const isCheck = process.argv.includes('--check');
+    const rendered = renderDocument();
+    const outputPath = path.join(ROOT, 'index.html');
 
-if (isCheck) {
-    const current = fs.readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n');
-    if (current !== rendered) {
-        console.error('index.html is out of date; run node scripts/build.mjs');
-        process.exitCode = 1;
+    if (isCheck) {
+        const current = fs.readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n');
+        if (current !== rendered) {
+            console.error('index.html is out of date; run node scripts/build.mjs');
+            process.exitCode = 1;
+        } else {
+            console.log('index.html is up to date');
+        }
     } else {
-        console.log('index.html is up to date');
+        writeDocument(rendered);
+        console.log(`Generated ${path.relative(ROOT, outputPath)}`);
     }
-} else {
-    writeDocument(rendered);
-    console.log(`Generated ${path.relative(ROOT, outputPath)}`);
+}
+
+// Keep imports read-only so validation scripts can use renderDocument()
+// without rewriting the generated artifact.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    run();
 }
