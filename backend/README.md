@@ -40,6 +40,11 @@ Migadu connection. REST and `/v1/events` require the mailecho access JWT. The
 server requires the configured `Origin` for browser sockets; non-browser
 clients must send that explicit origin header as well.
 
+The Cloudflare Worker starts the raw bridge immediately after
+`WebSocketPair.server.accept()`. An accepted server socket is already usable;
+waiting for an `open` event would leave the 101 connection without an upstream
+bridge or protocol greeting.
+
 `expand[]` is accepted on message detail reads for `mailbox`, `headers`, and
 `attachments`. Event delivery is session-scoped and best-effort; deployments
 with multiple instances should replace the in-memory event hub with a shared

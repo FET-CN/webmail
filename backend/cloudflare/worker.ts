@@ -5,6 +5,7 @@ import { EncryptedSessionStore, type KeyValueStore } from "../core/session-kv.ts
 import { MemoryEventHub } from "../core/events.ts";
 import { SessionService } from "../core/session.ts";
 import type { ByteDuplex } from "../protocol/transport.ts";
+import { startRawWebSocketBridge } from "./websocket.ts";
 
 export interface Env {
   SESSION_KV: KVNamespace;
@@ -34,24 +35,7 @@ function rawWebSocket(request: Request, connectUpstream: () => Promise<ByteDuple
   const client = pair[0];
   const server = pair[1];
   server.accept();
-  server.binaryType = "arraybuffer";
-  server.addEventListener("open", async () => {
-    try {
-      const upstream = await connectUpstream();
-      const writer = upstream.writable.getWriter();
-      server.addEventListener("message", async (event) => {
-        const bytes = typeof event.data === "string" ? new TextEncoder().encode(event.data) : new Uint8Array(event.data as ArrayBuffer);
-        await writer.write(bytes);
-      });
-      server.addEventListener("close", async () => {
-        writer.releaseLock();
-        await upstream.close();
-      });
-      await upstream.readable.pipeTo(new WritableStream({ write: (chunk) => server.send(chunk) }));
-    } catch {
-      server.close(1011, "Upstream unavailable");
-    }
-  });
+  startRawWebSocketBridge(server, connectUpstream);
   return new Response(null, { status: 101, webSocket: client });
 }
 
