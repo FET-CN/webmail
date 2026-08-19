@@ -20,3 +20,11 @@ node scripts/check-generated.mjs
 Do not edit the generated `index.html` directly. The classic script order in
 `scripts/build.mjs` is intentional and is part of the application runtime
 contract.
+
+## Deployment
+
+The IAM, Authentik, Migadu, internal-mail suffix, and runtime deployment
+guides are in [docs/deployment](docs/deployment/README.md). They cover
+Cloudflare Workers, the new Deno Deploy platform, and self-hosted Deno.
+All three runtimes can serve `backend/public/index.html` from the API origin
+when `SERVE_WEBMAIL=true`.

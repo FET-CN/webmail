@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOCUMENT = 'src/document.html';
 const TEMPLATES = 'src/templates/app.html';
+export const GENERATED_DOCUMENTS = [
+    'index.html',
+    'backend/public/index.html'
+];
 
 export const STYLE_FILES = [
     'src/styles/base.css',
@@ -25,7 +29,6 @@ export const SCRIPT_FILES = [
     'src/js/storage/indexed-db.js',
     'src/js/storage/migrate.js',
     'src/js/mail/format.js',
-    'src/js/storage/accounts.js',
     'src/js/platform/logging.js',
     'src/js/platform/status.js',
     'src/js/platform/notifications.js',
@@ -85,28 +88,34 @@ export function renderDocument() {
 }
 
 function writeDocument(document) {
-    const outputPath = path.join(ROOT, 'index.html');
-    const temporaryPath = `${outputPath}.tmp-${process.pid}`;
-    fs.writeFileSync(temporaryPath, document);
-    fs.renameSync(temporaryPath, outputPath);
+    for (const output of GENERATED_DOCUMENTS) {
+        const outputPath = path.join(ROOT, output);
+        const temporaryPath = `${outputPath}.tmp-${process.pid}`;
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(temporaryPath, document);
+        fs.renameSync(temporaryPath, outputPath);
+    }
 }
 
 function run() {
     const isCheck = process.argv.includes('--check');
     const rendered = renderDocument();
-    const outputPath = path.join(ROOT, 'index.html');
 
     if (isCheck) {
-        const current = fs.readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n');
-        if (current !== rendered) {
-            console.error('index.html is out of date; run node scripts/build.mjs');
-            process.exitCode = 1;
-        } else {
-            console.log('index.html is up to date');
+        for (const output of GENERATED_DOCUMENTS) {
+            const outputPath = path.join(ROOT, output);
+            const current = fs.readFileSync(outputPath, 'utf8').replace(/\r\n/g, '\n');
+            if (current !== rendered) {
+                console.error(`${output} is out of date; run node scripts/build.mjs`);
+                process.exitCode = 1;
+            }
+        }
+        if (!process.exitCode) {
+            console.log('Generated documents are up to date');
         }
     } else {
         writeDocument(rendered);
-        console.log(`Generated ${path.relative(ROOT, outputPath)}`);
+        console.log(`Generated ${GENERATED_DOCUMENTS.join(' and ')}`);
     }
 }
 

@@ -1,8 +1,11 @@
 class _AccountView extends View {
-    constructor(imap) {
+    constructor(imap, accounts = [], currentAccountId = null) {
         super('account');
 
         this.imap = imap;
+        this.accounts = accounts;
+        this.currentAccountId = currentAccountId;
+        this.currentAccount = accounts.find(account => account.id === currentAccountId) || null;
         this.imap.onlogin = this.onLogin;
         this.imap.onclose = this.onClose;
 
@@ -28,6 +31,7 @@ class _AccountView extends View {
         this.el.querySelector('.support')?.addEventListener('click', this.onClickSupport);
         this.el.querySelector('.logs')?.addEventListener('click', this.onClickLogs);
         this.el.querySelector('.manage')?.addEventListener('click', this.onClickManageMailboxes);
+        this.el.querySelector('.account-select')?.addEventListener('change', this.onAccountChange);
     }
 
     async open() {
@@ -45,6 +49,16 @@ class _AccountView extends View {
     }
 
     draw = () => {
+        const selector = this.el.querySelector('.account-select');
+        if(selector && this.accounts.length && selector.options.length === 0) {
+            for(const account of this.accounts) {
+                const option = document.createElement('option');
+                option.value = account.id;
+                option.innerText = account.address;
+                option.selected = account.id === this.currentAccountId;
+                selector.appendChild(option);
+            }
+        }
         if(this.imap.username) {
             this.el.querySelectorAll('.username').forEach(e => e.innerText=this.imap.username);
             this.el.querySelectorAll('.onlyloggedin').forEach(e => e.classList.remove('hidden'));
@@ -68,6 +82,15 @@ class _AccountView extends View {
         this.draw();
     }
 
+    onAccountChange = async (event) => {
+        const response = await apiFetch('/v1/session/select', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({mailbox_id: event.target.value})
+        });
+        if(response.ok) window.location.reload();
+    }
+
     onClose = () => {
         set_status("Disconnected.", "DISC");
         window.AccountView.draw();
@@ -75,13 +98,8 @@ class _AccountView extends View {
 
     onClickReconnect = async () => {
         this.imap.reconnect = true;
-        const password = window.knownAccounts[this.imap.username] || await promptPassword(this.imap.username);
-        if(!password) {
-            alert("Refusing to use an empty password!");
-            return;
-        }
         await this.imap.connect();
-        await this.imap.login(this.imap.username, password);
+        await this.imap.login(this.imap.username, '');
         await this.imap.list();
 
         if(window.MailboxView) {
@@ -105,6 +123,8 @@ class _AccountView extends View {
 
         if(this.imap.connected)
             await this.imap.logout();
+
+        await apiFetch('/v1/session/logout', {method: 'POST'}).catch(() => undefined);
 
         set_status();
 

@@ -5,16 +5,22 @@ import { fileURLToPath } from 'node:url';
 import {
     renderDocument,
     STYLE_FILES,
-    SCRIPT_FILES
+    SCRIPT_FILES,
+    GENERATED_DOCUMENTS
 } from './build.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const current = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')
-    .replace(/\r\n/g, '\n');
 const rendered = renderDocument();
+const documents = GENERATED_DOCUMENTS.map((output) => ({
+    output,
+    contents: fs.readFileSync(path.join(ROOT, output), 'utf8').replace(/\r\n/g, '\n')
+}));
+const current = documents[0].contents;
 
-if (current !== rendered) {
-    throw new Error('index.html does not match the current source files');
+for (const document of documents) {
+    if (document.contents !== rendered) {
+        throw new Error(`${document.output} does not match the current source files`);
+    }
 }
 
 for (const marker of [
@@ -63,4 +69,4 @@ if (generatedSources !== expectedSources) {
     throw new Error(`Expected ${expectedSources} generated source blocks, found ${generatedSources}`);
 }
 
-console.log(`Generated file and ${SCRIPT_FILES.length} JavaScript sources are valid`);
+console.log(`Generated documents and ${SCRIPT_FILES.length} JavaScript sources are valid`);

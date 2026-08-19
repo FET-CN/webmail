@@ -6,11 +6,16 @@ class _MessageView extends View {
         this.message = message;
         this.mailbox = mailbox;
         this.mailboxView = mailboxView;
+        this.localMessage = Boolean(message.localId);
 
         this.el.querySelectorAll('.reply').forEach(e => e.addEventListener('click', this.onClickReply.bind(this)));
         this.el.querySelectorAll('.replyall').forEach(e => e.addEventListener('click', this.onClickReplyAll.bind(this)));
         this.el.querySelectorAll('.replylist').forEach(e => e.addEventListener('click', this.onClickReplyList.bind(this)));
         this.el.querySelectorAll('.forward').forEach(e => e.addEventListener('click', this.onClickForward.bind(this)));
+
+        if(this.localMessage) {
+            this.el.querySelectorAll('.mark, .copy, .move').forEach(e => e.remove());
+        }
 
         this.el.querySelectorAll('.mailbox-list option:not(.title)').forEach(e => e.remove());
         this.el.querySelectorAll('.mark').forEach(e => e.onchange = e => {
@@ -85,7 +90,7 @@ class _MessageView extends View {
     async open() {
         try {
             await set_status(`Loading message ${this.message.uid}`, "LOAD");
-            await this.message.addFlags('\\Seen');
+            if(!this.localMessage) await this.message.addFlags('\\Seen');
             await super.open();
             await set_status("OK");
         } catch(e) {
@@ -120,7 +125,7 @@ class _MessageView extends View {
         await this.drawMessage(this.message,message_el);
 
         // Fetching the body
-        if(!this.message.body) {
+        if(!this.message.body && !this.localMessage) {
             await this.mailbox.loadMessage(this.message.uid,true);
             await this.message.loadMessage();
             this.mailbox.saveMessage(this.message,true);

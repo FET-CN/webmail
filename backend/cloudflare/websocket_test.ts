@@ -1,5 +1,5 @@
 import type { ByteDuplex } from "../protocol/transport.ts";
-import { startRawWebSocketBridge } from "./websocket.ts";
+import { startRawWebSocketBridge, transformCredentials } from "./websocket.ts";
 
 function assert(
   condition: unknown,
@@ -86,4 +86,43 @@ Deno.test("raw bridge starts after accept without waiting for an open event", as
     "the client message should be queued until upstream is ready",
   );
   assert(new TextDecoder().decode(writes[0]) === "A001 NOOP\r\n");
+});
+
+Deno.test("raw bridge replaces protocol credentials before upstream delivery", async () => {
+  const transform = transformCredentials({
+    username: "_webmail_backend@example.com",
+    password: "server-secret",
+    protocol: "imap",
+  });
+  const output = transform(
+    new TextEncoder().encode("A001 LOGIN alice@example.com browser-secret\r\n"),
+  );
+  assert(
+    new TextDecoder().decode(output[0]) ===
+      'A001 LOGIN "_webmail_backend@example.com" "server-secret"\r\n',
+  );
+  const binary = new Uint8Array([0, 255, 1, 2]);
+  assert(
+    transform(binary)[0] === binary,
+    "authenticated bytes must pass through unchanged",
+  );
+});
+
+Deno.test("raw bridge preserves binary bytes after the login line", () => {
+  const transform = transformCredentials({
+    username: "_webmail_backend@example.com",
+    password: "server-secret",
+    protocol: "smtp",
+  });
+  const login = new TextEncoder().encode("AUTH PLAIN browser-token\r\n");
+  const binary = new Uint8Array([0, 255, 1, 2, 128]);
+  const frame = new Uint8Array(login.byteLength + binary.byteLength);
+  frame.set(login);
+  frame.set(binary, login.byteLength);
+  const output = transform(frame);
+  assert(output.length === 2);
+  assert(new TextDecoder().decode(output[0]) ===
+    "AUTH PLAIN " + btoa("\0_webmail_backend@example.com\0server-secret") +
+      "\r\n");
+  assert(output[1].every((value, index) => value === binary[index]));
 });

@@ -2,7 +2,7 @@ class CockmailStorage {
     constructor(dbname="global") {
         this.dbnameprefix = "cock-mail-"
         this.dbname = dbname;
-        this.version = 2;
+        this.version = 3;
         this.db = null;
 
         this.dbopen = null;
@@ -161,7 +161,6 @@ class GlobalStorage extends CockmailStorage {
         switch(e.oldVersion) {
             case 0:
                 const settings = this.db.createObjectStore('settings');
-                const accounts = this.db.createObjectStore('accounts');
                 const lsKeys = Object.keys(localStorage);
                 if(lsKeys.includes('cock-mail-settings')) {
                     const key = 'cock-mail-settings';
@@ -175,19 +174,11 @@ class GlobalStorage extends CockmailStorage {
                     }
                     localStorage.removeItem(key);
                 }
-                if(lsKeys.includes('cock-mail-accounts')) {
-                    const key = 'cock-mail-accounts';
-                    const parsed = parseLegacyStorageValue(localStorage.getItem(key));
-                    if(parsed.ok) {
-                        for(const username of Object.keys(parsed.value))
-                            accounts.put(parsed.value[username],username);
-                    } else {
-                        reportLegacyStorageIssue(key, parsed);
-                    }
-                    localStorage.removeItem(key);
-                }
                 break;
         }
+        if(e.oldVersion < 3 && this.db.objectStoreNames.contains('accounts'))
+            this.db.deleteObjectStore('accounts');
+        localStorage.removeItem('cock-mail-accounts');
     }
 }
 

@@ -4,51 +4,21 @@
             <h1>Log-in to mailecho</h1>
             <!-- <h2 class=official><a href=/cock-mail/>Visit the Project Page</a></h2> -->
             <div class=login_form><!-- t-login_form --></div>
-            Known accounts:
-            <ul class=account_list><!-- t-login-account_list{,_empty} --></ul>
-            <nav>
-                <a class=managestorage>Manage Storage</a>
-            </nav>
             <pre class=login_notes>
             </pre>
         </div>
-    </template>
-
-    <template id=t-login-account_list>
-        <li class=entry>
-            <span class=username>test</span>
-            <a class=delete>Delete</a>
-        </li>
-    </template>
-
-    <template id=t-login-account_list_empty>
-        <li class="entry no_accounts">No saved accounts</li>
     </template>
 
     <template id=t-login_form>
         <form method=POST onsubmit="return false;">
             <table>
                 <tr>
-                    <th>Username</th>
-                    <td><input name=username placeholder="example-test@cock.li"></td>
-                </tr>
-                <tr>
-                    <th>Password</th>
-                    <td><input type=password name=password></td>
-                </tr>
-                <tr>
-                    <th>Save Password</th>
-                    <td>
-                        <select name=save_password>
-                            <option value=never selected>Never</option>
-                            <option value=session>For This Session</option>
-                            <option value=save>Save to Browser</option>
-                        </select>
-                    </td>
+                    <th>Identity</th>
+                    <td>Authentik SSO</td>
                 </tr>
                 <tr>
                     <th></th>
-                    <td><input type=submit value="Log In"></td>
+                    <td><input type=submit value="Continue with FET Account"></td>
                 </tr>
             </table>
         </form>
@@ -64,6 +34,10 @@
             </div>
             <div class="onlyloggedin hidden">
                 <i class=username></i>
+                <label class=account_switcher>
+                    Mailbox:
+                    <select class=account-select aria-label="Select mailbox"></select>
+                </label>
                 <hr>
                 <a class=compose>Compose</a>
                 <hr>
@@ -256,7 +230,7 @@
                     </tr>
                     <tr>
                         <th>From:</th>
-                        <td><input name=from></td>
+                        <td><select name=from aria-label="From address"></select></td>
                     </tr>
                     <tr>
                         <th>To:</th>
@@ -300,7 +274,7 @@
         <div class=prompt>
             <h1 class=title></h1>
             <a class=close>Close</a>
-            <!-- t-{password,settings,storage,logs,input}-prompt -->
+            <!-- t-{settings,storage,logs,input}-prompt -->
         </div>
     </template>
 
@@ -345,16 +319,6 @@
             <input type=text />
             <input type=submit value=Submit />
         </form>
-    </template>
-
-    <template id=t-password-prompt>
-        <div class=content>
-            <p>
-                Since you did not save your password ("For Session", or "To Browser"), you must re-enter it in order to continue.
-            </p>
-            <br />
-            <!-- t-login_form -->
-        </div>
     </template>
 
     <template id=t-settings-prompt>
@@ -412,7 +376,9 @@
     <template id=t-storage-prompt>
         <div class=content>
             <p>
-                mailecho saves your messages, settings, and optionally login details to your browser's storage. You can delete that storage here.
+                mailecho saves message caches and settings to your browser's
+                storage. Mail credentials are never stored in the browser.
+                You can delete that storage here.
             </p>
             <p>
                 <strong>CAUTION</strong>: If you delete the global store, mailecho will break until you refresh. If you clicked "Log Out" and delete a store you previously opened, the same thing happens.
@@ -421,8 +387,8 @@
                 Storage used: <span class=storageused></span>
             </p>
             <hr>
-            <a class=deleteall>Delete ALL</a>&nbsp;mailboxes, settings, and accounts
-            <h4>Saved Accounts and Global Settings</h4>
+            <a class=deleteall>Delete ALL</a>&nbsp;mailboxes and settings
+            <h4>Global Settings</h4>
             <ul class=globalstores><!-- t-storage-store --></ul>
             <h4>Account Settings</h4>
             <ul class=accountstores><!-- t-storage-store --></ul>

@@ -59,10 +59,10 @@ class _MailboxView extends View {
             await set_status("OK");
 
             if(!window.MessageView) {
-                const message_keys = Object.keys(this.mailbox.messages);
+                const sortedMessages = this.sortMessages();
 
-                if(message_keys.length) {
-                    const most_recent_message = this.mailbox.messages[message_keys.pop()];
+                if(sortedMessages.length) {
+                    const most_recent_message = this.mailbox.messages[sortedMessages[0]];
                     /*await*/ this.openMessage(most_recent_message.uid);
                 }
             }
@@ -97,10 +97,52 @@ class _MailboxView extends View {
         await this.drawMessages();
 
         await this.mailbox.load();
+        await this.loadLocalMessages();
 
         this.el.mailbox_status.innerText = Object.keys(this.messages).length
             ? ''
             : '(no messages)';
+    }
+
+    async loadLocalMessages() {
+        if(!this.mailbox.imap.accountId) return;
+        const folder = this.mailbox.mailbox === 'INBOX'
+            ? 'INBOX'
+            : this.mailbox.mailbox === this.mailbox.imap.sent
+                ? 'Sent'
+                : null;
+        if(!folder) return;
+        const path = `/v1/accounts/${encodeURIComponent(this.mailbox.imap.accountId)}`
+            + `/local-messages?folder=${encodeURIComponent(folder)}`;
+        const response = await apiFetch(path);
+        if(!response.ok) return;
+        const payload = await response.json();
+        const records = Array.isArray(payload.data) ? payload.data : [];
+        const previous = Object.values(this.messages)
+            .filter((entry) => entry.message?.localId);
+        for(const entry of previous) {
+            entry.remove();
+            delete this.messages[entry.uid];
+            delete this.mailbox.messages[entry.uid];
+        }
+        // Local delivery is not addressable through IMAP, so keep its display
+        // identifiers outside the positive IMAP UID space.
+        let localUid = -1;
+        for(const record of records) {
+            const raw = Uint8Array.from(
+                atob(record.raw || ''),
+                character => character.charCodeAt(0)
+            );
+            const message = new Message();
+            message.uid = localUid--;
+            message.localId = record.id;
+            message.flags = record.flags || [];
+            await message.loadMessage(new TextDecoder().decode(raw));
+            message.full = true;
+            this.mailbox.messages[message.uid] = message;
+            await this.buildMessage(message, 0);
+        }
+        await this.drawMessages();
     }
 
     draw = async () => {
@@ -138,6 +180,7 @@ class _MailboxView extends View {
             entry.date.innerText = ( decodeDate(message.headers.get('date','one')) || "(blank)" );
             entry.checkbox.onpointerdown = e => e.stopPropagation();
             entry.checkbox.onchange = this.drawMessageControls;
+            entry.checkbox.disabled = Boolean(message.localId);
             entry.onpointerdown = this.onClickMessage;
 
             this.messages[parseInt(message.uid)] = entry;
@@ -450,11 +493,14 @@ class _MailboxView extends View {
     refresh = async () => {
         await set_status(`Refreshing ${this.mailbox.mailbox}`, "LOAD");
         await this.mailbox.load();
+        await this.loadLocalMessages();
         await set_status("OK");
     }
 
     onClickSelectAll = async () => {
-        this.el.querySelectorAll('.message_list .message input[type=checkbox]').forEach(e => { e.checked = true; });
+        this.el.querySelectorAll(
+            '.message_list .message input[type=checkbox]:not(:disabled)'
+        ).forEach(e => { e.checked = true; });
         this.drawMessageControls();
     }
 
@@ -476,7 +522,7 @@ class _MailboxView extends View {
         const message = target_message.message;
         if(e.ctrlKey) {
             const checkbox = target_message.checkbox;
-            checkbox.checked = !checkbox.checked;
+            if(!checkbox.disabled) checkbox.checked = !checkbox.checked;
             this.drawMessageControls();
         } else if(e.shiftKey) {
             window.getSelection().removeAllRanges();
@@ -494,7 +540,9 @@ class _MailboxView extends View {
 
             const to_select = all_messages.filter((a,p) => p >= target_a && p <= target_b);
 
-            for(const el of to_select) el.checkbox.checked = !el.checkbox.checked;
+            for(const el of to_select) {
+                if(!el.checkbox.disabled) el.checkbox.checked = !el.checkbox.checked;
+            }
 
             this.drawMessageControls();
         } else {
@@ -522,7 +570,7 @@ class _MailboxView extends View {
 
         await this.updateMessage(message);
 
-        if(setRead)
+        if(setRead && !message.localId)
             await this.mailbox.markMessages(message.uid,'add','\\Seen');
 
         await this.mailbox.updateInfo();
@@ -551,7 +599,7 @@ class _MailboxView extends View {
     getCheckedMessages() {
         const uids = [];
         for(const el of this.el.querySelectorAll(".message input:checked")) {
-            if(!uids.includes(el.parentElement.uid))
+            if(!el.disabled && !uids.includes(el.parentElement.uid))
                 uids.push(el.parentElement.uid);
         }
         return uids;

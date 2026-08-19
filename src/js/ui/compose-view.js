@@ -5,7 +5,9 @@ class _ComposeView extends View {
         message.headers.set('MIME-Version','1.0');
         message.mime = true;
         this.message = message;
-        this.from = window.AccountView?.imap.username;
+        const account = window.AccountView?.currentAccount;
+        this.senders = [account?.address, account?.internalAddress].filter(Boolean);
+        this.from = this.senders[0] || window.AccountView?.imap.username;
         this.rcpts = [];
         this.bodypos = 0;
         this.allowsignature = true;
@@ -14,7 +16,7 @@ class _ComposeView extends View {
         this.el.querySelectorAll('.cancel').forEach(e => e.addEventListener('click', async () => await this.onClickCancel.call(this)));
 
         this.el.addEventListener('keyup', (async (e) => await this.onKeyUp.call(this,e)));
-        this.el.querySelectorAll('input').forEach(e => e.addEventListener('blur', (async () => await this.setMessageFields.call(this))));
+        this.el.querySelectorAll('input, select').forEach(e => e.addEventListener('blur', (async () => await this.setMessageFields.call(this))));
         this.el.querySelectorAll('textarea').forEach(e => e.addEventListener('blur', (async () => await this.setMessageFields.call(this))));
 
         this.el.querySelectorAll('input[name=to]').forEach(e => e.addEventListener('blur', (async () => await this.drawRCPTs.call(this))));
@@ -42,11 +44,16 @@ class _ComposeView extends View {
     }
 
     async draw() {
-        this.el.querySelectorAll('input[name=from]').forEach(e => {
-            if(window.AccountSettings.name)
-                e.value = window.AccountSettings.name + ' <' + (this.from || '') + '>';
-            else
-                e.value = this.from || '';
+        this.el.querySelectorAll('select[name=from]').forEach(e => {
+            if(e.options.length === 0) {
+                for(const sender of this.senders) {
+                    const option = document.createElement('option');
+                    option.value = sender;
+                    option.innerText = sender;
+                    e.appendChild(option);
+                }
+            }
+            e.value = this.from || '';
         });
         this.el.querySelectorAll('input[name=to]').forEach(e => {e.value = this.message.headers.get('to','join') || ''});
         this.el.querySelectorAll('input[name=cc]').forEach(e => {e.value = this.message.headers.get('cc','join') || ''});
@@ -123,7 +130,11 @@ class _ComposeView extends View {
     }
 
     async setMessageFields() {
-        this.message.headers.set('From',this.el.querySelector('input[name=from]').value);
+        this.from = this.el.querySelector('select[name=from]').value;
+        const displayFrom = window.AccountSettings.name
+            ? window.AccountSettings.name + ' <' + this.from + '>'
+            : this.from;
+        this.message.headers.set('From',displayFrom);
         this.message.headers.set('To',this.el.querySelector('input[name=to]').value);
         this.message.headers.set('CC',this.el.querySelector('input[name=cc]').value);
         this.message.headers.set('BCC',this.el.querySelector('input[name=bcc]').value);
@@ -178,34 +189,25 @@ class _ComposeView extends View {
 
         await this.setMessageFields();
 
-        const username = window.AccountView.imap.username;
-        const password = window.knownAccounts[username] || await promptPassword(username);
-
-        if(!password) {
-            alert("Refusing to use an empty password!");
-        }
-
         await this.drawResponse('Sending message...');
-
-        const client = new SmtpClient();
-
         try {
-            this.message = await client.send(username,password,this.from,this.message);
+            await this.message.compile(true);
+            const response = await apiFetch('/v1/messages/send', {
+                method: 'POST',
+                headers: {'content-type': 'application/json'},
+                body: JSON.stringify({
+                    from: this.from,
+                    recipients: this.rcpts,
+                    raw: encodeBase64(this.message.message)
+                })
+            });
+            if(!response.ok) throw await response.json();
         } catch(e) {
             await this.drawResponse(e,'err');
             return;
         }
 
         await this.drawResponse("Message sent!","success");
-
-        try {
-            await set_status("Saving message to Sent", "LOAD");
-            await window.AccountView.imap.append(this.message,"Sent",["\\Seen"]);
-            await set_status("OK");
-        } catch(e) {
-            await set_status("ERR",null,e);
-            return;
-        }
 
         window.setTimeout(() => this.close(),1000);
     }

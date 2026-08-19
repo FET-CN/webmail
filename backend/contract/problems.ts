@@ -41,6 +41,18 @@ export const PROBLEM_DEFINITIONS = {
     status: 503,
     retryable: true,
   },
+  PROVISIONING_UNAVAILABLE: {
+    slug: "provisioning-unavailable",
+    title: "Mailbox provisioning unavailable",
+    status: 503,
+    retryable: true,
+  },
+  FORBIDDEN: {
+    slug: "forbidden",
+    title: "Forbidden",
+    status: 403,
+    retryable: false,
+  },
   MESSAGE_TOO_LARGE: {
     slug: "message-too-large",
     title: "Message too large",

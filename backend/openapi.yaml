@@ -2,103 +2,250 @@ openapi: 3.1.0
 info:
   title: mailecho API
   version: 1.0.0
-  description: REST API for authenticated Migadu-backed mail operations.
-  license: {name: Proprietary, identifier: Proprietary}
+  description: >-
+    Authentik-backed webmail API with server-side Migadu credentials and
+    local internal delivery.
+  license:
+    name: Proprietary
+    identifier: Proprietary
 servers:
   - url: /
 paths:
-  /v1/session/login:
-    post:
-      summary: Sign in to a Migadu mailbox
-      operationId: sessionLogin
+  /v1/session/start:
+    get:
+      summary: Start Authentik OIDC login
+      operationId: sessionStart
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/LoginRequest'}
       responses:
-        '201':
-          description: Session created; access and refresh cookies are set.
-          content: {application/json: {schema: {$ref: '#/components/schemas/Session'}}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+        "302":
+          description: Redirect to the Authentik authorization endpoint.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/session/callback:
+    get:
+      summary: Complete Authentik OIDC login
+      operationId: sessionCallback
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to the application after setting session cookies.
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/session/refresh:
     post:
       summary: Rotate the refresh token
       operationId: sessionRefresh
       security: []
       responses:
-        '200':
+        "200":
           description: Rotated session cookies.
           content:
             application/json:
               schema:
                 type: object
                 required: [object, refreshed]
-                properties: {object: {const: session}, refreshed: {type: boolean}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+                properties:
+                  object:
+                    const: session
+                  refreshed:
+                    type: boolean
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/session/logout:
     post:
       summary: Revoke the current session
       operationId: sessionLogout
-      security: [{bearerAuth: []}]
+      security:
+        - bearerAuth: []
       responses:
-        '200':
+        "200":
           description: Session revoked.
           content:
             application/json:
               schema:
                 type: object
                 required: [object, logged_out]
-                properties: {object: {const: session}, logged_out: {type: boolean}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+                properties:
+                  object:
+                    const: session
+                  logged_out:
+                    type: boolean
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/session/select:
+    post:
+      summary: Select another mailbox granted to the current identity
+      operationId: sessionSelectMailbox
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mailbox_id]
+              properties:
+                mailbox_id:
+                  type: string
+      responses:
+        "200":
+          description: Selected mailbox account.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/me:
+    get:
+      summary: Return the current identity and mailbox grants
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user and mailbox directory entries.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/accounts:
+    get:
+      summary: List mailboxes granted to the current identity
+      operationId: listAccounts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Mailbox account list.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/accounts/{account_id}/local-messages:
+    get:
+      summary: List locally delivered internal messages
+      operationId: listLocalMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: folder
+          in: query
+          schema:
+            type: string
+            enum: [INBOX, Sent]
+      responses:
+        "200":
+          description: Local message list with raw MIME encoded as base64.
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/mailboxes:
     get:
       summary: List mailboxes
       operationId: listMailboxes
-      security: [{bearerAuth: []}]
+      security:
+        - bearerAuth: []
       responses:
-        '200':
+        "200":
           description: Cursor-compatible mailbox list.
-          content: {application/json: {schema: {$ref: '#/components/schemas/ListMailbox'}}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMailbox"
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/mailboxes/{mailbox}/messages:
     get:
       summary: List message summaries
       operationId: listMessages
-      security: [{bearerAuth: []}]
+      security:
+        - bearerAuth: []
       parameters:
-        - {$ref: '#/components/parameters/Mailbox'}
-        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
-        - {name: after, in: query, schema: {type: string}}
-        - {name: 'expand[]', in: query, style: form, explode: false, schema: {type: array, items: {type: string, enum: [mailbox, attachments, headers]}}}
+        - $ref: "#/components/parameters/Mailbox"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: after
+          in: query
+          schema:
+            type: string
+        - name: "expand[]"
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [mailbox, attachments, headers]
       responses:
-        '200':
+        "200":
           description: Cursor-paginated message summaries.
-          content: {application/json: {schema: {$ref: '#/components/schemas/ListMessage'}}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMessage"
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/mailboxes/{mailbox}/messages/{uid}:
     get:
       summary: Retrieve a message
       operationId: getMessage
-      security: [{bearerAuth: []}]
+      security:
+        - bearerAuth: []
       parameters:
-        - {$ref: '#/components/parameters/Mailbox'}
-        - {name: uid, in: path, required: true, schema: {type: integer, minimum: 1}}
-        - {name: 'expand[]', in: query, style: form, explode: false, schema: {type: array, items: {type: string, enum: [mailbox, attachments, headers]}}}
+        - $ref: "#/components/parameters/Mailbox"
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: "expand[]"
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [mailbox, attachments, headers]
       responses:
-        '200':
-          description: Message resource; raw is base64 encoded.
-          content: {application/json: {schema: {$ref: '#/components/schemas/Message'}}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+        "200":
+          description: Message resource with raw MIME encoded as base64.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/mailboxes/{mailbox}/messages/{uid}/flags:
     patch:
       summary: Replace message flags
       operationId: updateMessageFlags
-      security: [{bearerAuth: []}]
+      security:
+        - bearerAuth: []
       parameters:
-        - {$ref: '#/components/parameters/Mailbox'}
-        - {name: uid, in: path, required: true, schema: {type: integer, minimum: 1}}
+        - $ref: "#/components/parameters/Mailbox"
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -106,19 +253,67 @@ paths:
             schema:
               type: object
               required: [flags]
-              properties: {flags: {type: array, items: {type: string}}}
+              properties:
+                flags:
+                  type: array
+                  items:
+                    type: string
       responses:
-        '200':
+        "200":
           description: Updated message flags.
-          content: {application/json: {schema: {$ref: '#/components/schemas/Message'}}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/mailboxes/{mailbox}/messages/{uid}/{action}:
+    post:
+      summary: Move or copy a message
+      operationId: moveOrCopyMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Mailbox"
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: action
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [move, copy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination]
+              properties:
+                destination:
+                  type: string
+      responses:
+        "202":
+          description: Message action accepted.
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/messages/send:
     post:
       summary: Send a message
       operationId: sendMessage
-      security: [{bearerAuth: []}]
+      security:
+        - bearerAuth: []
       parameters:
-        - {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 255}}
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            maxLength: 255
       requestBody:
         required: true
         content:
@@ -127,109 +322,360 @@ paths:
               type: object
               required: [recipients, raw]
               properties:
-                from: {type: string, format: email}
-                recipients: {type: array, minItems: 1, maxItems: 25, items: {type: string, format: email}}
-                raw: {type: string, contentEncoding: base64}
+                from:
+                  type: string
+                  format: email
+                  description: >-
+                    Must equal the assigned public mailbox address or its
+                    internal address.
+                recipients:
+                  type: array
+                  minItems: 1
+                  maxItems: 25
+                  items:
+                    type: string
+                    format: email
+                    description: >-
+                      Addresses on INTERNAL_MAIL_DOMAIN are delivered locally
+                      and never sent to Migadu. Internal and external
+                      recipients must be sent in separate requests.
+                raw:
+                  type: string
+                  contentEncoding: base64
       responses:
-        '202':
-          description: Message accepted.
+        "202":
+          description: >-
+            Message accepted. Internal recipients are stored locally;
+            external recipients use Migadu SMTP. Mixed recipient lists are
+            rejected. A Sent copy is recorded after successful delivery.
           content:
             application/json:
               schema:
                 type: object
                 required: [object, sent]
-                properties: {object: {const: message}, sent: {type: boolean}}
-        '4XX': {$ref: '#/components/responses/Problem'}
+                properties:
+                  object:
+                    const: message
+                  sent:
+                    type: boolean
+                  routes:
+                    type: object
+                    properties:
+                      local:
+                        type: integer
+                      migadu:
+                        type: integer
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailboxes:
+    get:
+      summary: List all managed mailboxes
+      operationId: adminListMailboxes
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Mailbox list.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+    post:
+      summary: Create a managed mailbox and backend identity
+      operationId: adminCreateMailbox
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMailboxRequest"
+      responses:
+        "201":
+          description: Mailbox created.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailboxes/{mailbox_id}:
+    patch:
+      summary: Update an active or suspended mailbox's operational state or local delivery
+      operationId: adminUpdateMailbox
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MailboxId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state:
+                  type: string
+                  enum: [active, suspended]
+                local_delivery_enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Mailbox updated.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailboxes/{mailbox_id}/grants:
+    post:
+      summary: Grant a user access to a mailbox
+      operationId: adminCreateGrant
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MailboxId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminGrantRequest"
+      responses:
+        "201":
+          description: Grant created.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailboxes/{mailbox_id}/grants/{user_id}:
+    delete:
+      summary: Revoke mailbox access
+      operationId: adminDeleteGrant
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MailboxId"
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Grant revoked.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailboxes/{mailbox_id}/{action}:
+    post:
+      summary: Run a mailbox lifecycle action; deletion uses schedule-delete or cancel-delete
+      operationId: adminMailboxAction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MailboxId"
+        - name: action
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - suspend
+              - restore
+              - rotate-credential
+              - schedule-delete
+              - cancel-delete
+      responses:
+        "200":
+          description: Lifecycle action applied.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/audit-events:
+    get:
+      summary: List mailbox administration audit events
+      operationId: adminListAuditEvents
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Audit event list.
+        "4XX":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
-    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
-    Mailbox: {name: mailbox, in: path, required: true, schema: {type: string, maxLength: 255}}
+    Mailbox:
+      name: mailbox
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 255
+    MailboxId:
+      name: mailbox_id
+      in: path
+      required: true
+      schema:
+        type: string
   responses:
     Problem:
       description: RFC 9457 Problem Details.
       content:
-        application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}
-        text/markdown: {schema: {type: string}}
-        text/html: {schema: {type: string}}
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+        text/markdown:
+          schema:
+            type: string
+        text/html:
+          schema:
+            type: string
   schemas:
-    LoginRequest:
+    AdminMailboxRequest:
       type: object
-      required: [username, password]
-      properties: {username: {type: string, format: email}, password: {type: string, format: password}}
-    Session:
-      type: object
-      required: [object, user, expires_at]
+      required: [local_part]
       properties:
-        object: {const: session}
-        user: {type: object, required: [object, id], properties: {object: {const: user}, id: {type: string}}}
-        expires_at: {type: string, format: date-time}
+        local_part:
+          type: string
+        domain:
+          type: string
+        name:
+          type: string
+        owner_user_id:
+          type: string
+    AdminGrantRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+        role:
+          type: string
+          enum: [member, manager]
     Mailbox:
       type: object
       required: [object, id, name, flags, delimiter]
       properties:
-        object: {const: mailbox}
-        id: {type: string}
-        name: {type: string}
-        flags: {type: array, items: {type: string}}
-        delimiter: {type: string}
+        object:
+          const: mailbox
+        id:
+          type: string
+        name:
+          type: string
+        flags:
+          type: array
+          items:
+            type: string
+        delimiter:
+          type: string
     MessageSummary:
       type: object
       required: [object, id, mailbox, uid, flags]
       properties:
-        object: {const: message_summary}
-        id: {type: string}
-        mailbox: {type: string}
-        uid: {type: integer}
-        flags: {type: array, items: {type: string}}
-        size: {type: integer}
+        object:
+          const: message_summary
+        id:
+          type: string
+        mailbox:
+          type: string
+        uid:
+          type: integer
+        flags:
+          type: array
+          items:
+            type: string
+        size:
+          type: integer
     Message:
       type: object
       required: [object, id, mailbox, uid, flags]
       properties:
-        object: {const: message}
-        id: {type: string}
+        object:
+          const: message
+        id:
+          type: string
         mailbox:
           oneOf:
-            - {type: string}
-            - {$ref: '#/components/schemas/Mailbox'}
-        uid: {type: integer}
-        flags: {type: array, items: {type: string}}
-        size: {type: integer}
-        raw: {type: string, contentEncoding: base64}
-        headers: {type: object}
-        attachments: {type: array, items: {type: object}}
+            - type: string
+            - $ref: "#/components/schemas/Mailbox"
+        uid:
+          type: integer
+        flags:
+          type: array
+          items:
+            type: string
+        size:
+          type: integer
+        raw:
+          type: string
+          contentEncoding: base64
+        headers:
+          type: object
+        attachments:
+          type: array
+          items:
+            type: object
     ListMailbox:
       type: object
       required: [object, data, has_more, next_cursor, page, page_size]
       properties:
-        object: {const: list}
-        data: {type: array, items: {$ref: '#/components/schemas/Mailbox'}}
-        has_more: {type: boolean}
-        next_cursor: {type: [string, 'null']}
-        page: {type: integer}
-        page_size: {type: integer}
+        object:
+          const: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Mailbox"
+        has_more:
+          type: boolean
+        next_cursor:
+          type: [string, "null"]
+        page:
+          type: integer
+        page_size:
+          type: integer
     ListMessage:
       type: object
       required: [object, data, has_more, next_cursor, page, page_size]
       properties:
-        object: {const: list}
-        data: {type: array, items: {$ref: '#/components/schemas/MessageSummary'}}
-        has_more: {type: boolean}
-        next_cursor: {type: [string, 'null']}
-        page: {type: integer}
-        page_size: {type: integer}
+        object:
+          const: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageSummary"
+        has_more:
+          type: boolean
+        next_cursor:
+          type: [string, "null"]
+        page:
+          type: integer
+        page_size:
+          type: integer
     Problem:
       type: object
-      required: [type, title, status, detail, instance, object, code, request_id, retryable]
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+        - object
+        - code
+        - request_id
+        - retryable
       properties:
-        type: {type: string, format: uri}
-        title: {type: string}
-        status: {type: integer}
-        detail: {type: string}
-        instance: {type: string}
-        object: {const: error}
-        code: {type: string}
-        request_id: {type: string}
-        retryable: {type: boolean}
-        param: {type: string}
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        object:
+          const: error
+        code:
+          type: string
+        request_id:
+          type: string
+        retryable:
+          type: boolean
+        param:
+          type: string

@@ -1,19 +1,22 @@
 import type { BackendConfig } from "./config.ts";
-import { signToken, verifyToken, type TokenClaims } from "./jwt.ts";
+import { signToken, type TokenClaims, verifyToken } from "./jwt.ts";
 import { AppError } from "./errors.ts";
-
-export interface MailCredentials {
-  username: string;
-  password: string;
-}
 
 export interface SessionRecord {
   sid: string;
-  credentials: MailCredentials;
+  userId: string;
+  issuer: string;
+  subject: string;
+  mailboxId: string;
+  credentialId: string;
   refreshJti: string;
   refreshFamily: string;
+  identityValidatedAt: number;
   expiresAt: number;
-  idempotency?: Record<string, { status: number; body: unknown; expiresAt: number }>;
+  idempotency?: Record<
+    string,
+    { status: number; body: unknown; expiresAt: number }
+  >;
 }
 
 export interface SessionStore {
@@ -55,64 +58,144 @@ export class MemorySessionStore implements SessionStore {
 }
 
 export class SessionService {
-  private readonly refreshLocks = new Map<string, Promise<{ accessToken: string; refreshToken: string }>>();
+  private readonly refreshLocks = new Map<
+    string,
+    Promise<{ accessToken: string; refreshToken: string }>
+  >();
 
-  constructor(private readonly store: SessionStore, private readonly config: BackendConfig) {}
+  constructor(
+    private readonly store: SessionStore,
+    private readonly config: BackendConfig,
+  ) {}
 
-  async create(credentials: MailCredentials): Promise<{ accessToken: string; refreshToken: string; record: SessionRecord }> {
+  async create(
+    identity: {
+      userId: string;
+      issuer: string;
+      subject: string;
+      mailboxId: string;
+      credentialId: string;
+      identityValidatedAt?: number;
+    },
+  ): Promise<
+    { accessToken: string; refreshToken: string; record: SessionRecord }
+  > {
     const sid = crypto.randomUUID();
     const refreshFamily = crypto.randomUUID();
     const record: SessionRecord = {
       sid,
-      credentials,
+      ...identity,
+      identityValidatedAt: identity.identityValidatedAt ?? Date.now(),
       refreshJti: "",
       refreshFamily,
       expiresAt: Date.now() + this.config.sessionTtlSeconds * 1000,
       idempotency: {},
     };
-    const accessToken = await signToken(credentials.username, sid, "access", this.config.accessTtlSeconds, this.config.jwtSecret);
-    const refreshToken = await signToken(credentials.username, sid, "refresh", this.config.refreshTtlSeconds, this.config.jwtSecret);
-    record.refreshJti = (await verifyToken(refreshToken, "refresh", this.config.jwtSecret)).jti;
+    const accessToken = await signToken(
+      identity.userId,
+      sid,
+      "access",
+      this.config.accessTtlSeconds,
+      this.config.jwtSecret,
+    );
+    const refreshToken = await signToken(
+      identity.userId,
+      sid,
+      "refresh",
+      this.config.refreshTtlSeconds,
+      this.config.jwtSecret,
+    );
+    record.refreshJti =
+      (await verifyToken(refreshToken, "refresh", this.config.jwtSecret)).jti;
     await this.store.put(record);
     return { accessToken, refreshToken, record };
   }
 
-  async access(token: string): Promise<{ claims: TokenClaims; record: SessionRecord }> {
+  async access(
+    token: string,
+  ): Promise<{ claims: TokenClaims; record: SessionRecord }> {
     const claims = await verifyToken(token, "access", this.config.jwtSecret);
     const record = await this.store.get(claims.sid);
-    if (!record || record.credentials.username !== claims.sub) {
-      throw new AppError("SESSION_EXPIRED", "The authentication session has expired.");
+    if (!record || record.userId !== claims.sub) {
+      throw new AppError(
+        "SESSION_EXPIRED",
+        "The authentication session has expired.",
+      );
+    }
+    if (
+      !record.identityValidatedAt ||
+      record.identityValidatedAt + this.config.oidcReauthSeconds * 1000 <=
+        Date.now()
+    ) {
+      throw new AppError(
+        "SESSION_EXPIRED",
+        "The identity provider session must be renewed.",
+      );
     }
     return { claims, record };
   }
 
-  async refresh(token: string): Promise<{ accessToken: string; refreshToken: string }> {
+  async refresh(
+    token: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     let claimsHint: TokenClaims | null = null;
     try {
       claimsHint = await verifyToken(token, "refresh", this.config.jwtSecret);
     } catch (error) {
       throw error;
     }
-    const previous = this.refreshLocks.get(claimsHint.sid) || Promise.resolve({ accessToken: "", refreshToken: "" });
+    const previous = this.refreshLocks.get(claimsHint.sid) ||
+      Promise.resolve({ accessToken: "", refreshToken: "" });
     const current = previous.then(() => this.rotateRefresh(token));
     this.refreshLocks.set(claimsHint.sid, current);
     try {
       return await current;
     } finally {
-      if (this.refreshLocks.get(claimsHint.sid) === current) this.refreshLocks.delete(claimsHint.sid);
+      if (this.refreshLocks.get(claimsHint.sid) === current) {
+        this.refreshLocks.delete(claimsHint.sid);
+      }
     }
   }
 
-  private async rotateRefresh(token: string): Promise<{ accessToken: string; refreshToken: string }> {
+  private async rotateRefresh(
+    token: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const claims = await verifyToken(token, "refresh", this.config.jwtSecret);
     const record = await this.store.get(claims.sid);
-    if (!record || record.refreshJti !== claims.jti || await this.store.isFamilyRevoked(record.refreshFamily)) {
+    if (
+      !record || record.refreshJti !== claims.jti ||
+      await this.store.isFamilyRevoked(record.refreshFamily)
+    ) {
       if (record) await this.store.revokeFamily(record.refreshFamily);
       throw new AppError("SESSION_EXPIRED", "The refresh session has expired.");
     }
-    const accessToken = await signToken(claims.sub, claims.sid, "access", this.config.accessTtlSeconds, this.config.jwtSecret);
-    const refreshToken = await signToken(claims.sub, claims.sid, "refresh", this.config.refreshTtlSeconds, this.config.jwtSecret);
-    record.refreshJti = (await verifyToken(refreshToken, "refresh", this.config.jwtSecret)).jti;
+    if (
+      !record.identityValidatedAt ||
+      record.identityValidatedAt + this.config.oidcReauthSeconds * 1000 <=
+        Date.now()
+    ) {
+      await this.store.revokeFamily(record.refreshFamily);
+      throw new AppError(
+        "SESSION_EXPIRED",
+        "The identity provider session must be renewed.",
+      );
+    }
+    const accessToken = await signToken(
+      claims.sub,
+      claims.sid,
+      "access",
+      this.config.accessTtlSeconds,
+      this.config.jwtSecret,
+    );
+    const refreshToken = await signToken(
+      claims.sub,
+      claims.sid,
+      "refresh",
+      this.config.refreshTtlSeconds,
+      this.config.jwtSecret,
+    );
+    record.refreshJti =
+      (await verifyToken(refreshToken, "refresh", this.config.jwtSecret)).jti;
     await this.store.put(record);
     return { accessToken, refreshToken };
   }

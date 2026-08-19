@@ -27,11 +27,9 @@ async function init() {
 }
 
 /*
-                                 IMPORTANT!
-    If you want to connect to websockets on a different host than the page is
-    being viewed from, you MUST change the 'connect-src' directive of the
-    Content-Security-Policy tag (search for it) like this:
-    connect-src wss://your-other-host.example.com;
+    `api_origin` controls both REST and WebSocket endpoints. When it names a
+    same-site API subdomain, add that HTTPS and WSS origin to the generated
+    document's `connect-src` directive as described in backend/README.md.
 */
 
 // These settings are things you will probably want to change.

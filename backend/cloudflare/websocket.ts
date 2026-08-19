@@ -16,6 +16,74 @@ function sendBytes(socket: WebSocket, chunk: Uint8Array): void {
   socket.send(chunk.slice().buffer);
 }
 
+export interface UpstreamCredentials {
+  username: string;
+  password: string;
+  protocol: "imap" | "smtp";
+  identityExpiresAt?: number;
+}
+
+export function transformCredentials(
+  credentials: UpstreamCredentials,
+): (chunk: Uint8Array) => Uint8Array[] {
+  let pending: Uint8Array<ArrayBufferLike> = new Uint8Array();
+  let authenticated = false;
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const join = (
+    left: Uint8Array<ArrayBufferLike>,
+    right: Uint8Array<ArrayBufferLike>,
+  ): Uint8Array<ArrayBufferLike> => {
+    const result = new Uint8Array(left.byteLength + right.byteLength);
+    result.set(left);
+    result.set(right, left.byteLength);
+    return result;
+  };
+  return (chunk) => {
+    if (authenticated) return [chunk];
+    pending = join(pending, chunk);
+    const output: Uint8Array[] = [];
+    while (!authenticated) {
+      let end = -1;
+      for (let index = 1; index < pending.length; index++) {
+        if (pending[index - 1] === 13 && pending[index] === 10) {
+          end = index - 1;
+          break;
+        }
+      }
+      if (end < 0) break;
+      const lineBytes = pending.slice(0, end);
+      const rest = pending.slice(end + 2);
+      const line = decoder.decode(lineBytes);
+      if (credentials.protocol === "imap" && /^\S+\s+LOGIN\s+/i.test(line)) {
+        const tag = line.split(/\s+/, 1)[0];
+        output.push(
+          encoder.encode(
+            `${tag} LOGIN "${credentials.username.replaceAll('"', "")}" "${
+              credentials.password.replaceAll('"', "")
+            }"\r\n`,
+          ),
+        );
+        authenticated = true;
+      } else if (
+        credentials.protocol === "smtp" && /^AUTH\s+PLAIN\s+/i.test(line)
+      ) {
+        const auth = btoa(`\0${credentials.username}\0${credentials.password}`);
+        output.push(encoder.encode(`AUTH PLAIN ${auth}\r\n`));
+        authenticated = true;
+      } else {
+        output.push(pending.slice(0, end + 2));
+      }
+      pending = rest;
+    }
+    if (authenticated && pending.byteLength) {
+      output.push(pending);
+      pending = new Uint8Array();
+    }
+    return output;
+  };
+}
+
 /**
  * Starts the raw protocol bridge after the Worker server socket has been accepted.
  * Cloudflare does not require an `open` event for an accepted WebSocketPair server.
@@ -23,12 +91,22 @@ function sendBytes(socket: WebSocket, chunk: Uint8Array): void {
 export function startRawWebSocketBridge(
   socket: WebSocket,
   connectUpstream: () => Promise<ByteDuplex>,
+  credentials?: UpstreamCredentials,
 ): void {
   socket.binaryType = "arraybuffer";
   let upstream: ByteDuplex | undefined;
   let writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
   let closed = false;
+  const identityTimer = credentials?.identityExpiresAt
+    ? setTimeout(
+      () => socket.close(4001, "Identity session expired"),
+      Math.max(0, credentials.identityExpiresAt - Date.now()),
+    )
+    : undefined;
   const pending: Uint8Array[] = [];
+  const transform = credentials
+    ? transformCredentials(credentials)
+    : (chunk: Uint8Array) => [chunk];
 
   const closeUpstream = async (): Promise<void> => {
     writer?.releaseLock();
@@ -53,10 +131,13 @@ export function startRawWebSocketBridge(
       pending.push(bytes);
       return;
     }
-    void writer.write(bytes).catch(() => fail());
+    for (const transformed of transform(bytes)) {
+      void writer.write(transformed).catch(() => fail());
+    }
   });
   socket.addEventListener("close", () => {
     closed = true;
+    if (identityTimer !== undefined) clearTimeout(identityTimer);
     void closeUpstream();
   });
 
@@ -68,7 +149,11 @@ export function startRawWebSocketBridge(
         return;
       }
       writer = upstream.writable.getWriter();
-      for (const bytes of pending) await writer.write(bytes);
+      for (const bytes of pending) {
+        for (const transformed of transform(bytes)) {
+          await writer.write(transformed);
+        }
+      }
       pending.length = 0;
       await upstream.readable.pipeTo(
         new WritableStream<Uint8Array>({
