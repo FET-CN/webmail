@@ -9,7 +9,7 @@ run_worker_first = true
 
 [[kv_namespaces]]
 binding = "SESSION_KV"
-id = "replace-with-production-kv-id"
+id = "6817efab1c86424a9652578c742c5f4e"
 
 [[durable_objects.bindings]]
 name = "PROVISIONING_LOCKS"
@@ -20,16 +20,16 @@ tag = "v1"
 new_sqlite_classes = ["ProvisioningLockObject"]
 
 [vars]
-APP_ORIGIN = "https://mail.example.com"
-PROBLEM_TYPE_BASE_URL = "https://api.example.com/problems"
-OIDC_ISSUER = "https://auth.example.com/application/o/webmail/"
-OIDC_CLIENT_ID = "from-authentik-application"
-OIDC_REDIRECT_URI = "https://mail.example.com/v1/session/callback"
+APP_ORIGIN = "https://mail.flowecho.org"
+PROBLEM_TYPE_BASE_URL = "https://mail.flowecho.org/problems"
+OIDC_ISSUER = "https://sso.flowecho.org/application/o/flowecho-webmail/"
+OIDC_CLIENT_ID = "flowecho-webmail"
+OIDC_REDIRECT_URI = "https://mail.flowecho.org/v1/session/callback"
 OIDC_WEBMAIL_GROUP = "webmail-users"
 OIDC_ADMIN_GROUP = "webmail-admin"
 OIDC_REAUTH_SECONDS = "900"
-MAIL_DOMAIN = "mail.example.com"
-INTERNAL_MAIL_DOMAIN = "internal.example.com"
+MAIL_DOMAIN = "flowecho.org"
+INTERNAL_MAIL_DOMAIN = "feti"
 MAILBOX_PROVISIONING_ENABLED = "true"
 MIGADU_API_BASE_URL = "https://api.migadu.com/v1"
 JWT_ACCESS_TTL_SECONDS = "900"

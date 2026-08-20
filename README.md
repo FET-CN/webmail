@@ -28,3 +28,5 @@ guides are in [docs/deployment](docs/deployment/README.md). They cover
 Cloudflare Workers, the new Deno Deploy platform, and self-hosted Deno.
 All three runtimes can serve `backend/public/index.html` from the API origin
 when `SERVE_WEBMAIL=true`.
+
+社区准则见 [docs/community-guidelines.md](docs/community-guidelines.md)。

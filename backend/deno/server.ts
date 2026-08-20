@@ -1,8 +1,14 @@
 import { configFromEnv } from "../core/config.ts";
 import { createHandler, type RuntimeAdapter } from "../core/app.ts";
 import { authenticateRequest } from "../core/request-auth.ts";
-import { authenticateProtocolRequest, requireMailboxAccess } from "../core/mailbox-access.ts";
-import { EncryptedSessionStore, type KeyValueStore } from "../core/session-kv.ts";
+import {
+  authenticateProtocolRequest,
+  requireMailboxAccess,
+} from "../core/mailbox-access.ts";
+import {
+  EncryptedSessionStore,
+  type KeyValueStore,
+} from "../core/session-kv.ts";
 import { MemoryEventHub } from "../core/events.ts";
 import { SessionService } from "../core/session.ts";
 import type { ByteDuplex } from "../protocol/transport.ts";
@@ -14,6 +20,7 @@ import { startRawWebSocketBridge } from "../cloudflare/websocket.ts";
 import { DenoKvProvisioningCoordinator } from "./provisioning-coordinator.ts";
 import { reconcileMailboxLifecycle } from "../core/mailbox-lifecycle.ts";
 import { isEmbeddedWebmailRequest } from "../core/embedded-webmail.ts";
+import { AppError } from "../core/errors.ts";
 
 const env = Deno.env.toObject();
 const config = configFromEnv(env);
@@ -31,9 +38,11 @@ const storage: KeyValueStore = {
   },
   async list(prefix) {
     const keys: string[] = [];
-    for await (const entry of kv.list({ prefix: ["mailecho", prefix] })) {
+    // Deno KV prefixes match complete key components, while application keys
+    // use a string namespace with sub-prefixes (for example directory:grant:).
+    for await (const entry of kv.list({ prefix: ["mailecho"] })) {
       const key = entry.key.at(-1);
-      if (typeof key === "string") keys.push(key);
+      if (typeof key === "string" && key.startsWith(prefix)) keys.push(key);
     }
     return keys;
   },
@@ -104,12 +113,19 @@ async function rawWebSocket(
     protocol,
   );
   const { socket, response } = Deno.upgradeWebSocket(request);
+  console.log(`${protocol.toUpperCase()} WebSocket accepted.`);
   startRawWebSocketBridge(
     socket,
     protocol === "imap" ? adapter.connectImap : adapter.connectSmtp,
     credentials,
   );
   return response;
+}
+
+function protocolErrorDetail(error: unknown): Record<string, string> {
+  if (error instanceof AppError) return { code: error.code };
+  if (error instanceof Error) return { name: error.name };
+  return { name: "UnknownError" };
 }
 
 async function eventWebSocket(request: Request): Promise<Response> {
@@ -184,26 +200,48 @@ async function embeddedWebmail(request: Request): Promise<Response | null> {
 async function requestHandler(request: Request): Promise<Response> {
   const url = new URL(request.url);
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+    console.log("WebSocket upgrade requested.", { path: url.pathname });
     if (!originAllowed(request)) {
       return Promise.resolve(new Response("Forbidden", { status: 403 }));
     }
     if (url.pathname === "/v1/events") {
-      return eventWebSocket(request).catch(() => new Response("Unauthorized", { status: 401 }));
+      return eventWebSocket(request).catch(() =>
+        new Response("Unauthorized", { status: 401 })
+      );
     }
     if (url.pathname === "/v1/imap") {
-      return rawWebSocket(request, runtime, "imap").catch(() =>
-        new Response("Unauthorized", { status: 401 })
-      );
+      return rawWebSocket(request, runtime, "imap").catch((error) => {
+        console.error(
+          "IMAP WebSocket request failed.",
+          protocolErrorDetail(error),
+        );
+        return new Response("Unauthorized", { status: 401 });
+      });
     }
     if (url.pathname === "/v1/smtp") {
-      return rawWebSocket(request, runtime, "smtp").catch(() =>
-        new Response("Unauthorized", { status: 401 })
-      );
+      return rawWebSocket(request, runtime, "smtp").catch((error) => {
+        console.error(
+          "SMTP WebSocket request failed.",
+          protocolErrorDetail(error),
+        );
+        return new Response("Unauthorized", { status: 401 });
+      });
     }
   }
   const page = await embeddedWebmail(request);
   if (page) return page;
-  return handler(request);
+  const response = await handler(request);
+  if (
+    url.pathname.startsWith("/v1/session/") || url.pathname === "/v1/me" ||
+    url.pathname === "/v1/messages/send"
+  ) {
+    console.log("REST request completed.", {
+      method: request.method,
+      path: url.pathname,
+      status: response.status,
+    });
+  }
+  return response;
 }
 
 console.log(`mailecho Deno backend listening on ${env.PORT || "8000"}`);

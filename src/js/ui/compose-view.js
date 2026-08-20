@@ -160,7 +160,14 @@ class _ComposeView extends View {
 
         if(typeof r === "object") {
             if(r instanceof Error) {
-                rmsg = `Javascript error: ${r}`;
+                rmsg = r.message || `Javascript error: ${r}`;
+            } else if(r && typeof r.detail === 'string') {
+                rmsg = [
+                    r.title,
+                    r.detail,
+                    r.code ? `Code: ${r.code}` : '',
+                    r.request_id ? `Request: ${r.request_id}` : ''
+                ].filter(Boolean).join('\r\n');
             } else {
                 if(type === 'err') {
                     rmsg = `Error during command:\r\n${r.cmd} ${r.arg || ''}\r\nServer said:\r\n${r.msg}`;
@@ -202,12 +209,19 @@ class _ComposeView extends View {
                 })
             });
             if(!response.ok) throw await response.json();
+            const result = await response.json();
+            const externalCount = Number(result?.routes?.migadu || 0);
+            const localCount = Number(result?.routes?.local || 0);
+            const deliveryStatus = externalCount
+                ? 'Message accepted by Migadu SMTP.'
+                : localCount
+                    ? 'Message delivered locally.'
+                    : 'Message accepted.';
+            await this.drawResponse(deliveryStatus,"success");
         } catch(e) {
             await this.drawResponse(e,'err');
             return;
         }
-
-        await this.drawResponse("Message sent!","success");
 
         window.setTimeout(() => this.close(),1000);
     }

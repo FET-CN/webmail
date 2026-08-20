@@ -11,9 +11,7 @@ window.config = {
     log_messages: 2000,
     // Log level to output to developer console. -1 to disable
     log_level_console: WARN,
-    // Keep this empty when the static application and /v1 share an origin.
-    // A same-site API subdomain is also supported; update connect-src in
-    // src/document.html before setting it.
+    // The self-hosted Deno backend serves the page and API from one origin.
     api_origin: ''
 };
 

@@ -10,7 +10,7 @@
                    subsidiaries.
 -->
 <title>mailecho</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' blob:; connect-src 'self' https://webmailapi.flowecho.org wss://webmailapi.flowecho.org;" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' blob:; connect-src 'self' wss://mail.flowecho.org;" />
 <meta charset="UTF-8" />
 <style data-source="src/styles/base.css">
 /*                                                      root */
@@ -265,6 +265,23 @@ option {
 }
 .account_panel p, .account_panel li {
     word-break: break-all;
+}
+
+.account_panel .username,
+.account_panel .account_switcher {
+    display: block;
+    max-width: 100%;
+}
+
+.account_panel .username {
+    overflow-wrap: anywhere;
+}
+
+.account_panel .account-select {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
 }
 
 .account_panel a {
@@ -1198,6 +1215,7 @@ class ImapClient {
 
         // Internal Callbacks
         this._onopen = null;    // On socket open and received greeting
+        this._onconnecterror = null; // Connection failure before greeting
         this._onclose = null;   // On socket close
         this._onmessage = null; // On partial or full message
         this._onerror = null;   // On socket error
@@ -1236,8 +1254,9 @@ class ImapClient {
         this._onmessage = this.#handleGreetingResponse;
 
         //if (this.ws.readyState === WebSocket.OPEN) return;
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             this._onopen = resolve;
+            this._onconnecterror = reject;
         });
     }
 
@@ -1987,7 +2006,7 @@ class ImapClient {
     }
 
     async #handleGreetingResponse(responseCallback) {
-        const greeting_regexp = /^\* OK(.*ready.*)/m;
+        const greeting_regexp = /^\* OK(.*ready.*)/im;
 
         const decoded = this.decoder.decode(this.responseBuffer);
 
@@ -1999,6 +2018,7 @@ class ImapClient {
             await responseCallback?.(greeting_match[1]);
             await this.#checkForCapabilities(greeting_match[1]);
             await this._onopen?.(greeting_match[1]);
+            this._onconnecterror = null;
             await this.onopen?.(greeting_match[1]);
             this.clearBuffer();
         } else {
@@ -2013,8 +2033,14 @@ class ImapClient {
         //this.onopen?.();
     }
 
-    #onWsClose = async () => {
+    #onWsClose = async (event) => {
         this.connected = false;
+        log('imap', `WebSocket closed (${event?.code || 1006}): ${event?.reason || 'no reason'}`, WARN, event);
+        if(!this.receivedGreeting) {
+            this._onconnecterror?.(new Error('Connection closed before IMAP greeting'));
+            this._onconnecterror = null;
+            this._onopen = null;
+        }
         //document.querySelector('#idle_status').classList.remove('idling');
         document.querySelector('#notify_status').classList.remove('notifying');
         this.commandState = null;
@@ -2025,11 +2051,16 @@ class ImapClient {
         window.clearTimeout(this._idleStartTimeout);
         window.clearTimeout(this._idleRestartTimeout);
         this._onclose?.();
-        this.onclose?.();
+        this.onclose?.(event);
         this.idleTag = null;
     }
 
     #onWsError = e => {
+        if(!this.receivedGreeting) {
+            this._onconnecterror?.(new Error('WebSocket connection failed'));
+            this._onconnecterror = null;
+            this._onopen = null;
+        }
         this._onerror?.(e);
         this.onerror?.(e);
     }
@@ -5473,6 +5504,7 @@ class _LoginView extends View {
             if(response.ok) await this.loginFromSession(await response.json());
         } catch(error) {
             log('auth', 'Unable to restore the webmail session', DEBUG, error);
+            await set_status('Unable to open mailbox', 'ERR', error?.message || error);
         }
     }
 
@@ -5529,6 +5561,7 @@ class _LoginView extends View {
             await window.AccountView.open();
         } catch(error) {
             set_status('ERR', null, error);
+            log('auth', 'Unable to connect to the mailbox', ERR, error);
             await client.close();
         }
     }
@@ -5554,6 +5587,9 @@ class _AccountView extends View {
         this.mailbox_container = this.el.querySelector('.mailboxes');
 
         this.mailboxOrder = {};
+        this.reconnectAttempts = 0;
+        this.reconnectTimer = null;
+        this.reconnecting = false;
 
         this.addEventListener('mailbox-created', this.onMailboxCreated);
         this.addEventListener('mailbox-renamed', this.onMailboxRenamed);
@@ -5629,35 +5665,75 @@ class _AccountView extends View {
         if(response.ok) window.location.reload();
     }
 
-    onClose = () => {
-        set_status("Disconnected.", "DISC");
-        window.AccountView.draw();
+    onClose = (event) => {
+        this.draw();
+        if(!this.imap.reconnect) {
+            set_status("Disconnected.", "DISC");
+            return;
+        }
+        if(event?.code === 4001) {
+            set_status("Session expired. Sign in again.", "ERR");
+            return;
+        }
+        this.scheduleReconnect();
     }
 
     onClickReconnect = async () => {
         this.imap.reconnect = true;
-        await this.imap.connect();
-        await this.imap.login(this.imap.username, '');
-        await this.imap.list();
+        this.reconnectAttempts = 0;
+        await this.reconnectMailbox();
+    }
 
-        if(window.MailboxView) {
-            await set_status(`Loading mailbox ${window.MailboxView.mailbox.mailbox}`, "LOAD");
-            await window.MailboxView.mailbox.load();
+    scheduleReconnect = () => {
+        if(this.reconnectTimer || !this.imap.reconnect) return;
+        const delay = Math.min(1000 * (2 ** this.reconnectAttempts), 30000);
+        this.reconnectAttempts += 1;
+        set_status(`Disconnected. Reconnecting in ${Math.ceil(delay / 1000)}s...`, "DISC");
+        this.reconnectTimer = window.setTimeout(() => {
+            this.reconnectTimer = null;
+            void this.reconnectMailbox();
+        }, delay);
+    }
+
+    reconnectMailbox = async () => {
+        if(this.reconnecting || !this.imap.reconnect) return;
+        this.reconnecting = true;
+        if(this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+        try {
+            await set_status("Reconnecting...", "LOAD");
+            await this.imap.connect();
+            await this.imap.login(this.imap.username, '');
+            await this.imap.list();
+
+            if(window.MailboxView) {
+                await set_status(`Loading mailbox ${window.MailboxView.mailbox.mailbox}`, "LOAD");
+                await window.MailboxView.mailbox.load();
+                await this.imap.notify();
+            }
+
+            this.reconnectAttempts = 0;
             await set_status("OK");
-
-            await window.AccountView.imap.notify();
+            this.draw();
+        } catch(error) {
+            log('imap', 'Reconnect failed', WARN, error);
+            this.scheduleReconnect();
+        } finally {
+            this.reconnecting = false;
         }
-
-        this.draw();
     }
 
     onClickDisconnect = async () => {
         this.imap.reconnect = false;
+        if(this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
         await this.imap.logout();
     } 
 
     onClickLogout = async () => {
         this.imap.reconnect = false;
+        if(this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
 
         if(this.imap.connected)
             await this.imap.logout();
@@ -7158,7 +7234,14 @@ class _ComposeView extends View {
 
         if(typeof r === "object") {
             if(r instanceof Error) {
-                rmsg = `Javascript error: ${r}`;
+                rmsg = r.message || `Javascript error: ${r}`;
+            } else if(r && typeof r.detail === 'string') {
+                rmsg = [
+                    r.title,
+                    r.detail,
+                    r.code ? `Code: ${r.code}` : '',
+                    r.request_id ? `Request: ${r.request_id}` : ''
+                ].filter(Boolean).join('\r\n');
             } else {
                 if(type === 'err') {
                     rmsg = `Error during command:\r\n${r.cmd} ${r.arg || ''}\r\nServer said:\r\n${r.msg}`;
@@ -7200,12 +7283,19 @@ class _ComposeView extends View {
                 })
             });
             if(!response.ok) throw await response.json();
+            const result = await response.json();
+            const externalCount = Number(result?.routes?.migadu || 0);
+            const localCount = Number(result?.routes?.local || 0);
+            const deliveryStatus = externalCount
+                ? 'Message accepted by Migadu SMTP.'
+                : localCount
+                    ? 'Message delivered locally.'
+                    : 'Message accepted.';
+            await this.drawResponse(deliveryStatus,"success");
         } catch(e) {
             await this.drawResponse(e,'err');
             return;
         }
-
-        await this.drawResponse("Message sent!","success");
 
         window.setTimeout(() => this.close(),1000);
     }
@@ -7747,9 +7837,7 @@ window.config = {
     log_messages: 2000,
     // Log level to output to developer console. -1 to disable
     log_level_console: WARN,
-    // Keep this empty when the static application and /v1 share an origin.
-    // A same-site API subdomain is also supported; update connect-src in
-    // src/document.html before setting it.
+    // The self-hosted Deno backend serves the page and API from one origin.
     api_origin: ''
 };
 

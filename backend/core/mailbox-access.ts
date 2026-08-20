@@ -154,7 +154,7 @@ async function createManagedMailboxLocked(
       createdAt: now,
       updatedAt: now,
     };
-    remoteIdentityLocalPart = `_webmail_${
+    remoteIdentityLocalPart = `webmail_${
       mailboxId.replaceAll("-", "").slice(0, 20)
     }`;
     const backendIdentity = await runtime.migaduAdmin.createBackendIdentity(

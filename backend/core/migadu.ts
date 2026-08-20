@@ -72,9 +72,26 @@ export class MigaduAdminClient implements MigaduAdmin {
       value = null;
     }
     if (!response.ok && !(ignoreNotFound && response.status === 404)) {
+      const providerError = value && typeof value === "object"
+        ? Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).filter(([key, item]) =>
+            ["error", "message", "code", "detail"].includes(key) &&
+            (typeof item === "string" || typeof item === "number" ||
+              typeof item === "boolean")
+          ),
+        )
+        : undefined;
+      console.error("Migadu API rejected a request.", {
+        path,
+        method: init.method || "GET",
+        status: response.status,
+        ...(providerError && Object.keys(providerError).length > 0
+          ? { providerError }
+          : {}),
+      });
       throw new AppError(
         "PROVISIONING_UNAVAILABLE",
-        "Migadu rejected the mailbox operation.",
+        `Migadu rejected the mailbox operation (HTTP ${response.status}).`,
         undefined,
         { status: response.status, value },
       );

@@ -145,7 +145,7 @@ OIDC_ADMIN_GROUP=webmail-admin
 
 1. 以 `iss + sub` 查找或创建内部用户；
 2. 按 `preferred_username` 创建一个 Migadu mailbox；
-3. 创建一个 `_webmail_*` 的独立 Migadu identity；
+3. 创建一个 `webmail_*` 的独立 Migadu identity；
 4. 只把该 identity 的凭据加密保存在后端 KV；
 5. 浏览器只获得 Mailecho session cookie。
 
@@ -238,7 +238,7 @@ node scripts/check-generated.mjs
 4. 先以 `SERVE_WEBMAIL=false` 验证 API，再打开同源 HTML；或者在部署前直接
    生成并设置为 `true`。
 5. 用一个非生产 Authentik 测试用户登录，确认首次登录只创建一个 mailbox 和
-   一个 `_webmail_*` identity。
+   一个 `webmail_*` identity。
 6. 验证外部邮件、纯内部邮件、未知内部地址和混合收件人四种路径。
 7. 验证管理员 suspend、restore、rotate credential 和 schedule-delete；删除
    只在 30 天 retention 到期后由 lifecycle job 执行。

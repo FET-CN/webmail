@@ -233,8 +233,15 @@ export async function deliverMessage(
         external,
         deliveryMessage,
       );
+      console.info("Migadu SMTP accepted outbound message.", {
+        recipientCount: external.length,
+      });
     } finally {
-      await Promise.resolve(transport.close()).catch(() => undefined);
+      try {
+        await transport.close();
+      } catch {
+        // The SMTP client may have encountered a connection that is already closed.
+      }
     }
   }
 

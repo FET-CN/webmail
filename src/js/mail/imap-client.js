@@ -56,6 +56,7 @@ class ImapClient {
 
         // Internal Callbacks
         this._onopen = null;    // On socket open and received greeting
+        this._onconnecterror = null; // Connection failure before greeting
         this._onclose = null;   // On socket close
         this._onmessage = null; // On partial or full message
         this._onerror = null;   // On socket error
@@ -94,8 +95,9 @@ class ImapClient {
         this._onmessage = this.#handleGreetingResponse;
 
         //if (this.ws.readyState === WebSocket.OPEN) return;
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             this._onopen = resolve;
+            this._onconnecterror = reject;
         });
     }
 
@@ -845,7 +847,7 @@ class ImapClient {
     }
 
     async #handleGreetingResponse(responseCallback) {
-        const greeting_regexp = /^\* OK(.*ready.*)/m;
+        const greeting_regexp = /^\* OK(.*ready.*)/im;
 
         const decoded = this.decoder.decode(this.responseBuffer);
 
@@ -857,6 +859,7 @@ class ImapClient {
             await responseCallback?.(greeting_match[1]);
             await this.#checkForCapabilities(greeting_match[1]);
             await this._onopen?.(greeting_match[1]);
+            this._onconnecterror = null;
             await this.onopen?.(greeting_match[1]);
             this.clearBuffer();
         } else {
@@ -871,8 +874,14 @@ class ImapClient {
         //this.onopen?.();
     }
 
-    #onWsClose = async () => {
+    #onWsClose = async (event) => {
         this.connected = false;
+        log('imap', `WebSocket closed (${event?.code || 1006}): ${event?.reason || 'no reason'}`, WARN, event);
+        if(!this.receivedGreeting) {
+            this._onconnecterror?.(new Error('Connection closed before IMAP greeting'));
+            this._onconnecterror = null;
+            this._onopen = null;
+        }
         //document.querySelector('#idle_status').classList.remove('idling');
         document.querySelector('#notify_status').classList.remove('notifying');
         this.commandState = null;
@@ -883,11 +892,16 @@ class ImapClient {
         window.clearTimeout(this._idleStartTimeout);
         window.clearTimeout(this._idleRestartTimeout);
         this._onclose?.();
-        this.onclose?.();
+        this.onclose?.(event);
         this.idleTag = null;
     }
 
     #onWsError = e => {
+        if(!this.receivedGreeting) {
+            this._onconnecterror?.(new Error('WebSocket connection failed'));
+            this._onconnecterror = null;
+            this._onopen = null;
+        }
         this._onerror?.(e);
         this.onerror?.(e);
     }

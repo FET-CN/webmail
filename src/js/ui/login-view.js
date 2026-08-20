@@ -26,6 +26,7 @@ class _LoginView extends View {
             if(response.ok) await this.loginFromSession(await response.json());
         } catch(error) {
             log('auth', 'Unable to restore the webmail session', DEBUG, error);
+            await set_status('Unable to open mailbox', 'ERR', error?.message || error);
         }
     }
 
@@ -82,6 +83,7 @@ class _LoginView extends View {
             await window.AccountView.open();
         } catch(error) {
             set_status('ERR', null, error);
+            log('auth', 'Unable to connect to the mailbox', ERR, error);
             await client.close();
         }
     }

@@ -163,6 +163,23 @@
     word-break: break-all;
 }
 
+.account_panel .username,
+.account_panel .account_switcher {
+    display: block;
+    max-width: 100%;
+}
+
+.account_panel .username {
+    overflow-wrap: anywhere;
+}
+
+.account_panel .account-select {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+}
+
 .account_panel a {
     display: block;
 }

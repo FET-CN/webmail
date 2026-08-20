@@ -109,12 +109,21 @@ export function startRawWebSocketBridge(
     : (chunk: Uint8Array) => [chunk];
 
   const closeUpstream = async (): Promise<void> => {
-    writer?.releaseLock();
+    // Clear shared references before awaiting close. The socket close event
+    // and the readable pipe can finish concurrently, so both paths may call
+    // this function for the same upstream connection.
+    const activeWriter = writer;
+    const activeUpstream = upstream;
     writer = undefined;
-    if (upstream) {
-      await Promise.resolve(upstream.close()).catch(() => undefined);
-    }
     upstream = undefined;
+    activeWriter?.releaseLock();
+    if (activeUpstream) {
+      try {
+        await activeUpstream.close();
+      } catch {
+        // The connection may already have been closed by its readable stream.
+      }
+    }
   };
 
   const fail = async (): Promise<void> => {
@@ -135,8 +144,13 @@ export function startRawWebSocketBridge(
       void writer.write(transformed).catch(() => fail());
     }
   });
-  socket.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
     closed = true;
+    console.log("Protocol WebSocket closed.", {
+      code: event.code,
+      reason: event.reason || "No reason provided",
+      wasClean: event.wasClean,
+    });
     if (identityTimer !== undefined) clearTimeout(identityTimer);
     void closeUpstream();
   });
@@ -144,6 +158,7 @@ export function startRawWebSocketBridge(
   void (async () => {
     try {
       upstream = await connectUpstream();
+      console.log("Protocol upstream connected.");
       if (closed) {
         await closeUpstream();
         return;
@@ -160,7 +175,17 @@ export function startRawWebSocketBridge(
           write: (chunk) => sendBytes(socket, chunk),
         }),
       );
-    } catch {
+      if (!closed && socket.readyState === WebSocket.OPEN) {
+        console.warn("Protocol upstream closed the connection.");
+        socket.close(1011, "Upstream disconnected");
+      }
+      await closeUpstream();
+    } catch (error) {
+      if (!closed) {
+        console.error("Protocol upstream connection failed.", {
+          name: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
       await fail();
     }
   })();

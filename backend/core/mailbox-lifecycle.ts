@@ -157,7 +157,7 @@ export async function rotateMailboxCredential(
     ? await runtime.credentials.get(mailbox.credentialId)
     : null;
   const identity = await runtime.migaduAdmin.createBackendIdentity(
-    `_webmail_${mailbox.id.replaceAll("-", "").slice(0, 20)}_${
+    `webmail_${mailbox.id.replaceAll("-", "").slice(0, 20)}_${
       Date.now().toString(36)
     }`,
     mailbox.domain,

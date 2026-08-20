@@ -16,6 +16,9 @@ class _AccountView extends View {
         this.mailbox_container = this.el.querySelector('.mailboxes');
 
         this.mailboxOrder = {};
+        this.reconnectAttempts = 0;
+        this.reconnectTimer = null;
+        this.reconnecting = false;
 
         this.addEventListener('mailbox-created', this.onMailboxCreated);
         this.addEventListener('mailbox-renamed', this.onMailboxRenamed);
@@ -91,35 +94,75 @@ class _AccountView extends View {
         if(response.ok) window.location.reload();
     }
 
-    onClose = () => {
-        set_status("Disconnected.", "DISC");
-        window.AccountView.draw();
+    onClose = (event) => {
+        this.draw();
+        if(!this.imap.reconnect) {
+            set_status("Disconnected.", "DISC");
+            return;
+        }
+        if(event?.code === 4001) {
+            set_status("Session expired. Sign in again.", "ERR");
+            return;
+        }
+        this.scheduleReconnect();
     }
 
     onClickReconnect = async () => {
         this.imap.reconnect = true;
-        await this.imap.connect();
-        await this.imap.login(this.imap.username, '');
-        await this.imap.list();
+        this.reconnectAttempts = 0;
+        await this.reconnectMailbox();
+    }
 
-        if(window.MailboxView) {
-            await set_status(`Loading mailbox ${window.MailboxView.mailbox.mailbox}`, "LOAD");
-            await window.MailboxView.mailbox.load();
+    scheduleReconnect = () => {
+        if(this.reconnectTimer || !this.imap.reconnect) return;
+        const delay = Math.min(1000 * (2 ** this.reconnectAttempts), 30000);
+        this.reconnectAttempts += 1;
+        set_status(`Disconnected. Reconnecting in ${Math.ceil(delay / 1000)}s...`, "DISC");
+        this.reconnectTimer = window.setTimeout(() => {
+            this.reconnectTimer = null;
+            void this.reconnectMailbox();
+        }, delay);
+    }
+
+    reconnectMailbox = async () => {
+        if(this.reconnecting || !this.imap.reconnect) return;
+        this.reconnecting = true;
+        if(this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+        try {
+            await set_status("Reconnecting...", "LOAD");
+            await this.imap.connect();
+            await this.imap.login(this.imap.username, '');
+            await this.imap.list();
+
+            if(window.MailboxView) {
+                await set_status(`Loading mailbox ${window.MailboxView.mailbox.mailbox}`, "LOAD");
+                await window.MailboxView.mailbox.load();
+                await this.imap.notify();
+            }
+
+            this.reconnectAttempts = 0;
             await set_status("OK");
-
-            await window.AccountView.imap.notify();
+            this.draw();
+        } catch(error) {
+            log('imap', 'Reconnect failed', WARN, error);
+            this.scheduleReconnect();
+        } finally {
+            this.reconnecting = false;
         }
-
-        this.draw();
     }
 
     onClickDisconnect = async () => {
         this.imap.reconnect = false;
+        if(this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
         await this.imap.logout();
     } 
 
     onClickLogout = async () => {
         this.imap.reconnect = false;
+        if(this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
 
         if(this.imap.connected)
             await this.imap.logout();

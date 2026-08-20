@@ -33,6 +33,10 @@ function b64decode(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+function cryptoBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
 function parseJwt(
   token: string,
 ): {
@@ -73,42 +77,69 @@ async function verifyIdToken(
   config: BackendConfig,
 ): Promise<Record<string, unknown>> {
   const parsed = parseJwt(token);
-  if (parsed.header.alg !== "RS256" || typeof parsed.header.kid !== "string") {
+  const algorithm = parsed.header.alg;
+  if (algorithm !== "RS256" && algorithm !== "HS256") {
     throw new AppError(
       "AUTH_INVALID",
       "The identity provider token algorithm is not allowed.",
     );
   }
-  const response = await fetch(discovery.jwks_uri);
-  if (!response.ok) {
-    throw new AppError(
-      "AUTH_INVALID",
-      "The identity provider keys are unavailable.",
+  let valid: boolean;
+  if (algorithm === "HS256") {
+    // Authentik can use a confidential client's secret for HMAC-signed ID
+    // tokens. The issuer, audience, nonce, and expiry are still validated
+    // below, so accepting HS256 does not weaken the provider binding.
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(config.oidcClientSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      cryptoBuffer(parsed.signature),
+      new TextEncoder().encode(parsed.signingInput),
+    );
+  } else {
+    if (typeof parsed.header.kid !== "string") {
+      throw new AppError(
+        "AUTH_INVALID",
+        "The identity provider signing key is unknown.",
+      );
+    }
+    const response = await fetch(discovery.jwks_uri);
+    if (!response.ok) {
+      throw new AppError(
+        "AUTH_INVALID",
+        "The identity provider keys are unavailable.",
+      );
+    }
+    const jwks = await response.json() as { keys?: Jwk[] };
+    const jwk = jwks.keys?.find((key) =>
+      key.kid === parsed.header.kid && key.kty === "RSA"
+    );
+    if (!jwk) {
+      throw new AppError(
+        "AUTH_INVALID",
+        "The identity provider signing key is unknown.",
+      );
+    }
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    valid = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      cryptoBuffer(parsed.signature),
+      new TextEncoder().encode(parsed.signingInput),
     );
   }
-  const jwks = await response.json() as { keys?: Jwk[] };
-  const jwk = jwks.keys?.find((key) =>
-    key.kid === parsed.header.kid && key.kty === "RSA"
-  );
-  if (!jwk) {
-    throw new AppError(
-      "AUTH_INVALID",
-      "The identity provider signing key is unknown.",
-    );
-  }
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
-  const valid = await crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    parsed.signature,
-    new TextEncoder().encode(parsed.signingInput),
-  );
   if (!valid) {
     throw new AppError(
       "AUTH_INVALID",

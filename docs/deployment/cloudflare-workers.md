@@ -101,7 +101,7 @@ curl -i -H 'Accept: application/json' \
 应看到 `/` 的 HTML、`/v1/me` 的 `401` 和 problem JSON。然后用测试用户完成
 OIDC 登录，检查 Worker 日志和 Migadu：
 
-- 只创建一个稳定 mailbox 和一个 `_webmail_*` identity；
+- 只创建一个稳定 mailbox 和一个 `webmail_*` identity；
 - session cookie 来自 `mail.example.com`；
 - IMAP/SMTP WebSocket 的 `Origin` 必须是该站点；
 - `*/5 * * * *` 的 scheduled invocation 在 Cloudflare 日志中出现；

@@ -398,6 +398,13 @@ export function createHandler(
         ))).filter((mailbox): mailbox is MailboxRecord =>
           Boolean(mailbox)
         );
+        console.log("Session mailbox directory loaded.", {
+          mailboxCount: mailboxes.length,
+          states: mailboxes.map((mailbox) => mailbox.state),
+          hasCurrent: mailboxes.some((mailbox) =>
+            mailbox.id === identity.record.mailboxId
+          ),
+        });
         return json(
           {
             object: "me",

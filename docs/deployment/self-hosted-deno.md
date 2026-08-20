@@ -66,7 +66,7 @@ systemd unit、shell history 或 Caddy 配置。
 deno task --config backend/deno/deno.json start
 ```
 
-该 task 已包含 `--allow-env --allow-net --allow-read`，所以能读取环境变量、连接
+该 task 已包含 `--unstable-kv --allow-env --allow-net --allow-read --allow-write`，所以能读取环境变量、连接
 OIDC/Migadu、读取 `backend/public/index.html` 和打开 `DENO_KV_PATH`。自托管进程
 使用 `LIFECYCLE_RECONCILE_SECONDS` 的常驻 interval，默认 300 秒；保持进程常驻，
 不要用一次性命令启动后立即退出。

@@ -32,6 +32,10 @@ function decodePart(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+function cryptoBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
 async function key(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "raw",
@@ -85,7 +89,7 @@ export async function verifyToken(
     const valid = await crypto.subtle.verify(
       "HMAC",
       await key(secret),
-      decodePart(encodedSignature),
+      cryptoBuffer(decodePart(encodedSignature)),
       encoder.encode(`${encodedHeader}.${encodedPayload}`),
     );
     if (!valid) throw new Error();

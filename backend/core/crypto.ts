@@ -18,6 +18,10 @@ function unb64(value: string): Uint8Array {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+function cryptoBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.slice().buffer as ArrayBuffer;
+}
+
 async function encryptionKey(secret: string): Promise<CryptoKey> {
   const digest = await crypto.subtle.digest("SHA-256", encoder.encode(secret));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, [
@@ -32,7 +36,7 @@ export async function encryptJson(
 ): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: cryptoBuffer(iv) },
     await encryptionKey(secret),
     encoder.encode(JSON.stringify(value)),
   );
@@ -48,9 +52,9 @@ export async function decryptJson<T>(
     throw new Error("Invalid encrypted value");
   }
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: unb64(encodedIv) },
+    { name: "AES-GCM", iv: cryptoBuffer(unb64(encodedIv)) },
     await encryptionKey(secret),
-    unb64(encodedCiphertext),
+    cryptoBuffer(unb64(encodedCiphertext)),
   );
   return JSON.parse(decoder.decode(plaintext)) as T;
 }

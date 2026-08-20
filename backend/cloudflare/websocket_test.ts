@@ -88,6 +88,38 @@ Deno.test("raw bridge starts after accept without waiting for an open event", as
   assert(new TextDecoder().decode(writes[0]) === "A001 NOOP\r\n");
 });
 
+Deno.test("raw bridge closes an upstream at most once", async () => {
+  const socket = new FakeSocket();
+  const gate = deferred<ByteDuplex>();
+  const readable = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("* OK ready\r\n"));
+      controller.close();
+    },
+  });
+  let closeCalls = 0;
+
+  startRawWebSocketBridge(
+    socket as unknown as WebSocket,
+    async () => gate.promise,
+  );
+  gate.resolve({
+    readable,
+    writable: new WritableStream<Uint8Array>(),
+    close: () => {
+      closeCalls += 1;
+      throw new Error("the underlying connection was already closed");
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  socket.dispatchEvent(new Event("close"));
+  socket.dispatchEvent(new Event("close"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert(closeCalls === 1, "the upstream close operation should be idempotent");
+});
+
 Deno.test("raw bridge replaces protocol credentials before upstream delivery", async () => {
   const transform = transformCredentials({
     username: "_webmail_backend@example.com",
@@ -121,8 +153,10 @@ Deno.test("raw bridge preserves binary bytes after the login line", () => {
   frame.set(binary, login.byteLength);
   const output = transform(frame);
   assert(output.length === 2);
-  assert(new TextDecoder().decode(output[0]) ===
-    "AUTH PLAIN " + btoa("\0_webmail_backend@example.com\0server-secret") +
-      "\r\n");
+  assert(
+    new TextDecoder().decode(output[0]) ===
+      "AUTH PLAIN " + btoa("\0_webmail_backend@example.com\0server-secret") +
+        "\r\n",
+  );
   assert(output[1].every((value, index) => value === binary[index]));
 });
