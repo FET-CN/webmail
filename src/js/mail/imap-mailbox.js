@@ -388,7 +388,13 @@ class ImapMailbox {
     }
 
     async compactUids() {
-        return compactUIDEncode(Object.keys(this.messages));
+        // Local-only messages use negative UIDs outside the IMAP sequence space
+        // (see MailboxView.loadLocalMessages). They are not addressable through
+        // IMAP and must never be sent to the server: a negative range in a
+        // QRESYNC known-uids set makes the server reject the SELECT.
+        return compactUIDEncode(
+            Object.keys(this.messages).filter((uid) => parseInt(uid, 10) > 0),
+        );
     }
 }
 
