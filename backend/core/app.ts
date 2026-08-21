@@ -14,6 +14,19 @@ import type { RuntimeAdapter } from "./runtime.ts";
 import { authenticateRequest, refreshCookie } from "./request-auth.ts";
 import { generatedLocalPart } from "./migadu.ts";
 import {
+  completeMailboxClaim,
+  listMyClaims,
+  requestMailboxClaim,
+  submitMailboxClaimCode,
+} from "./mailbox-claim.ts";
+import {
+  approveRegistration,
+  listMyRegistrations,
+  listPendingRegistrations,
+  rejectRegistration,
+  requestMailboxRegistration,
+} from "./mailbox-registration.ts";
+import {
   applyMailboxLifecycleAction,
   audit,
   type MailboxLifecycleAction,
@@ -21,13 +34,16 @@ import {
   rotateMailboxCredential,
   setMailboxOperationalState,
 } from "./mailbox-lifecycle.ts";
-import { createManagedMailbox } from "./mailbox-access.ts";
-import { allowedSender, deliverMessage } from "./message-delivery.ts";
 import {
+  createManagedMailbox,
+  generateSuggestedAddress,
+  pickSenderMailbox,
   provision,
   requireAdmin,
   requireMailboxAccess,
+  requireWebmailUser,
 } from "./mailbox-access.ts";
+import { allowedSender, deliverMessage } from "./message-delivery.ts";
 
 export type { RuntimeAdapter } from "./runtime.ts";
 
@@ -304,12 +320,13 @@ export function createHandler(
           runtime.oidcStorage,
         ).callback(code, state);
         const provisioned = await provision(oidcIdentity, runtime);
+        const mailboxSelected = !("needsMailboxSelection" in provisioned);
         const result = await sessions.create({
           userId: provisioned.user.id,
           issuer: provisioned.user.issuer,
           subject: provisioned.user.subject,
-          mailboxId: provisioned.mailbox.id,
-          credentialId: provisioned.credential.id,
+          mailboxId: mailboxSelected ? provisioned.mailbox.id : undefined,
+          credentialId: mailboxSelected ? provisioned.credential.id : undefined,
           identityValidatedAt: Date.now(),
         });
         const headers = corsHeaders(request, runtime.config.appOrigin);
@@ -398,6 +415,16 @@ export function createHandler(
         ))).filter((mailbox): mailbox is MailboxRecord =>
           Boolean(mailbox)
         );
+        const admin = Boolean(
+          user?.groups.includes(runtime.config.oidcAdminGroup),
+        );
+        const pendingRegistrations = await runtime.directory
+          .listRegistrationRequestsForUser(identity.record.userId);
+        const pendingClaims = await runtime.directory
+          .listMailboxClaimRequestsForUser(identity.record.userId);
+        const adminPending = admin
+          ? await runtime.directory.listPendingRegistrationRequests()
+          : [];
         console.log("Session mailbox directory loaded.", {
           mailboxCount: mailboxes.length,
           states: mailboxes.map((mailbox) => mailbox.state),
@@ -411,9 +438,15 @@ export function createHandler(
             user,
             mailboxes,
             current_mailbox_id: identity.record.mailboxId,
-            admin: Boolean(
-              user?.groups.includes(runtime.config.oidcAdminGroup),
-            ),
+            admin,
+            needs_mailbox_selection: mailboxes.length === 0,
+            pending_registration_count: pendingRegistrations.filter((item) =>
+              item.state === "pending"
+            ).length,
+            pending_claim_count: pendingClaims.filter((item) =>
+              item.state === "pending_verification"
+            ).length,
+            admin_pending_registration_count: adminPending.length,
           },
           200,
           headers,
@@ -444,6 +477,136 @@ export function createHandler(
           200,
           headers,
         );
+      }
+
+      if (
+        url.pathname === "/v1/mailbox-registrations" &&
+        request.method === "POST"
+      ) {
+        const user = await requireWebmailUser(identity, runtime);
+        const input = await body(request);
+        const registration = await requestMailboxRegistration(runtime, user, {
+          local_part: String(input.local_part || ""),
+          name: typeof input.name === "string" ? input.name : undefined,
+        });
+        return json(
+          { object: "registration_request", ...registration },
+          201,
+          headers,
+        );
+      }
+      if (
+        url.pathname === "/v1/mailbox-registrations" &&
+        request.method === "GET"
+      ) {
+        const user = await requireWebmailUser(identity, runtime);
+        const registrations = await listMyRegistrations(runtime, user.id);
+        return json(
+          {
+            object: "list",
+            data: registrations.map((item) => ({
+              object: "registration_request",
+              ...item,
+            })),
+            has_more: false,
+            next_cursor: null,
+            page: 1,
+            page_size: registrations.length,
+          },
+          200,
+          headers,
+        );
+      }
+
+      if (url.pathname === "/v1/mailbox-claims" && request.method === "POST") {
+        const user = await requireWebmailUser(identity, runtime);
+        const sender = await pickSenderMailbox(runtime, user);
+        const input = await body(request);
+        const claim = await requestMailboxClaim(runtime, user, sender, {
+          address: String(input.address || ""),
+        });
+        return json({ object: "claim_request", ...claim }, 201, headers);
+      }
+      if (url.pathname === "/v1/mailbox-claims" && request.method === "GET") {
+        const user = await requireWebmailUser(identity, runtime);
+        const claims = await listMyClaims(runtime, user.id);
+        return json(
+          {
+            object: "list",
+            data: claims.map((claim) => ({ object: "claim_request", ...claim })),
+            has_more: false,
+            next_cursor: null,
+            page: 1,
+            page_size: claims.length,
+          },
+          200,
+          headers,
+        );
+      }
+      const claimVerifyMatch = url.pathname.match(
+        /^\/v1\/mailbox-claims\/([^/]+)\/verify$/,
+      );
+      if (claimVerifyMatch && request.method === "POST") {
+        const user = await requireWebmailUser(identity, runtime);
+        const input = await body(request);
+        const result = await submitMailboxClaimCode(
+          runtime,
+          user,
+          decodeURIComponent(claimVerifyMatch[1]),
+          String(input.code || ""),
+        );
+        return json(
+          {
+            object: "claim_request",
+            ...result.claim,
+            ...(result.mailbox ? { mailbox: result.mailbox } : {}),
+          },
+          200,
+          headers,
+        );
+      }
+      const claimCompleteMatch = url.pathname.match(
+        /^\/v1\/mailbox-claims\/([^/]+)\/complete$/,
+      );
+      if (claimCompleteMatch && request.method === "POST") {
+        const user = await requireWebmailUser(identity, runtime);
+        const result = await completeMailboxClaim(
+          runtime,
+          user,
+          decodeURIComponent(claimCompleteMatch[1]),
+        );
+        return json(
+          {
+            object: "claim_request",
+            ...result.claim,
+            mailbox: result.mailbox,
+          },
+          200,
+          headers,
+        );
+      }
+      if (
+        url.pathname === "/v1/session/accept-suggested-mailbox" &&
+        request.method === "POST"
+      ) {
+        const user = await requireWebmailUser(identity, runtime);
+        const localPart = generatedLocalPart(user.preferredUsername);
+        const address = await generateSuggestedAddress(runtime, localPart);
+        const suggestedLocalPart = address.slice(0, address.lastIndexOf("@"));
+        const created = await createManagedMailbox(runtime, {
+          localPart: suggestedLocalPart,
+          domain: runtime.config.mailDomain,
+          name: `webmail ${user.preferredUsername}`,
+          ownerUserId: user.id,
+          createdBy: user.id,
+        });
+        user.primaryMailboxId = created.mailbox.id;
+        user.updatedAt = new Date().toISOString();
+        await runtime.directory.putUser(user);
+        identity.record.mailboxId = created.mailbox.id;
+        identity.record.credentialId = created.credential.id;
+        await runtime.sessions.put(identity.record);
+        return json({ object: "mailbox", ...created.mailbox }, 200, headers);
       }
 
       if (url.pathname.startsWith("/v1/admin/")) {
@@ -662,6 +825,76 @@ export function createHandler(
               page: 1,
               page_size: events.length,
             },
+            200,
+            headers,
+          );
+        }
+        if (
+          url.pathname === "/v1/admin/mailbox-registrations" &&
+          request.method === "GET"
+        ) {
+          const state = url.searchParams.get("state");
+          const registrations = state
+            ? await runtime.directory.listRegistrationRequests()
+            : await listPendingRegistrations(runtime);
+          const filtered = state
+            ? registrations.filter((item) => item.state === state)
+            : registrations;
+          const data = await Promise.all(filtered.map(async (item) => {
+            const requester = await runtime.directory.getUser(item.userId);
+            return {
+              object: "registration_request",
+              ...item,
+              requester_username: requester?.preferredUsername,
+            };
+          }));
+          return json(
+            {
+              object: "list",
+              data,
+              has_more: false,
+              next_cursor: null,
+              page: 1,
+              page_size: filtered.length,
+            },
+            200,
+            headers,
+          );
+        }
+        const registrationApproveMatch = url.pathname.match(
+          /^\/v1\/admin\/mailbox-registrations\/([^/]+)\/approve$/,
+        );
+        if (registrationApproveMatch && request.method === "POST") {
+          const input = await body(request);
+          const result = await approveRegistration(
+            runtime,
+            admin,
+            decodeURIComponent(registrationApproveMatch[1]),
+            typeof input.note === "string" ? input.note : undefined,
+          );
+          return json(
+            {
+              object: "registration_request",
+              ...result.request,
+              mailbox: result.mailbox,
+            },
+            200,
+            headers,
+          );
+        }
+        const registrationRejectMatch = url.pathname.match(
+          /^\/v1\/admin\/mailbox-registrations\/([^/]+)\/reject$/,
+        );
+        if (registrationRejectMatch && request.method === "POST") {
+          const input = await body(request);
+          const result = await rejectRegistration(
+            runtime,
+            admin,
+            decodeURIComponent(registrationRejectMatch[1]),
+            typeof input.note === "string" ? input.note : undefined,
+          );
+          return json(
+            { object: "registration_request", ...result },
             200,
             headers,
           );

@@ -95,6 +95,42 @@ export const PROBLEM_DEFINITIONS = {
     status: 404,
     retryable: false,
   },
+  ADDRESS_UNAVAILABLE: {
+    slug: "address-unavailable",
+    title: "Address unavailable",
+    status: 409,
+    retryable: false,
+  },
+  ADDRESS_ALREADY_BOUND: {
+    slug: "address-already-bound",
+    title: "Address already bound",
+    status: 409,
+    retryable: false,
+  },
+  ADDRESS_PENDING_CLAIM: {
+    slug: "address-pending-claim",
+    title: "Address pending claim",
+    status: 409,
+    retryable: false,
+  },
+  REGISTRATION_DUPLICATE: {
+    slug: "registration-duplicate",
+    title: "Duplicate registration",
+    status: 409,
+    retryable: false,
+  },
+  VERIFICATION_FAILED: {
+    slug: "verification-failed",
+    title: "Verification failed",
+    status: 400,
+    retryable: false,
+  },
+  VERIFICATION_EXPIRED: {
+    slug: "verification-expired",
+    title: "Verification expired",
+    status: 410,
+    retryable: false,
+  },
 } as const;
 
 export type ProblemCode = keyof typeof PROBLEM_DEFINITIONS;

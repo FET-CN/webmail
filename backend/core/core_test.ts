@@ -24,6 +24,7 @@ import {
   rotateMailboxCredential,
 } from "./mailbox-lifecycle.ts";
 import { isEmbeddedWebmailRequest } from "./embedded-webmail.ts";
+import type { ByteDuplex } from "../protocol/transport.ts";
 
 function assert(
   condition: unknown,
@@ -76,6 +77,7 @@ class FakeMigaduAdmin implements MigaduAdmin {
   mailboxCreates = 0;
   identityCreates = 0;
   readonly deletedIdentities: string[] = [];
+  readonly existingAddresses = new Set<string>();
   async createMailbox(
     localPart: string,
     domain: string,
@@ -83,6 +85,7 @@ class FakeMigaduAdmin implements MigaduAdmin {
     _password: string,
   ): Promise<MigaduMailbox> {
     this.mailboxCreates += 1;
+    this.existingAddresses.add(`${localPart}@${domain}`.toLowerCase());
     return {
       address: `${localPart}@${domain}`,
       local_part: localPart,
@@ -105,6 +108,18 @@ class FakeMigaduAdmin implements MigaduAdmin {
   async deleteMailbox(): Promise<void> {}
   async deleteBackendIdentity(localPart: string): Promise<void> {
     this.deletedIdentities.push(localPart);
+  }
+  async getMailbox(
+    localPart: string,
+    domain: string,
+  ): Promise<MigaduMailbox | null> {
+    const address = `${localPart}@${domain}`.toLowerCase();
+    if (!this.existingAddresses.has(address)) return null;
+    return {
+      address: `${localPart}@${domain}`,
+      local_part: localPart,
+      domain_name: domain,
+    };
   }
 }
 
@@ -928,12 +943,16 @@ Deno.test("JIT provisioning keeps a stable mailbox under concurrent login", asyn
     provision(identity, runtime),
     provision(identity, runtime),
   ]);
-  assertEquals(results[0].mailbox.id, results[1].mailbox.id);
+  const first = results[0];
+  const second = results[1];
+  assert(!("needsMailboxSelection" in first), "Expected a provisioned mailbox");
+  assert(!("needsMailboxSelection" in second), "Expected a provisioned mailbox");
+  assertEquals(first.mailbox.id, second.mailbox.id);
   assertEquals(migadu.mailboxCreates, 1);
   assertEquals(migadu.identityCreates, 1);
 });
 
-Deno.test("JIT provisioning rejects a second identity claiming the same address", async () => {
+Deno.test("JIT provisioning guides a second identity whose name is already bound", async () => {
   const migadu = new FakeMigaduAdmin();
   const runtime = testRuntime(testConfig(), migadu);
   const identity = {
@@ -942,19 +961,21 @@ Deno.test("JIT provisioning rejects a second identity claiming the same address"
     email: "shared@example.com",
     groups: ["webmail-users"],
   };
-  const results = await Promise.allSettled([
+  const results = await Promise.all([
     provision({ ...identity, subject: "subject-one" }, runtime),
     provision({ ...identity, subject: "subject-two" }, runtime),
   ]);
-  assertEquals(
-    results.filter((result) => result.status === "fulfilled").length,
-    1,
+  const [first, second] = results;
+  assert(
+    !("needsMailboxSelection" in first),
+    "Expected the first identity to receive a mailbox",
   );
-  assertEquals(
-    results.filter((result) => result.status === "rejected").length,
-    1,
+  assert(
+    "needsMailboxSelection" in second,
+    "Expected the second identity to be guided",
   );
   assertEquals(migadu.mailboxCreates, 1);
+  assert(second.suggestedAddress.startsWith("shared-name-"));
 });
 
 Deno.test("credential rotation switches the stored identity before retiring the old one", async () => {
@@ -1002,4 +1023,266 @@ Deno.test("scheduled mailbox deletion is retry-safe and removes local access", a
   assertEquals(deleted?.state, "deleted");
   assertEquals(await runtime.directory.getGrant(user.id, mailbox.id), null);
   assertEquals(migadu.deletedIdentities.length, 1);
+});
+
+function smtpCapture(): { transport: ByteDuplex; writes: string[] } {
+  const encoder = new TextEncoder();
+  const writes: string[] = [];
+  const responses = [
+    "220 smtp.example.test ready\r\n",
+    "250-smtp.example.test\r\n250 AUTH PLAIN\r\n",
+    "235 Authentication successful\r\n",
+    "250 Sender accepted\r\n",
+    "250 Recipient accepted\r\n",
+    "354 Send message content\r\n",
+    "250 Message queued\r\n",
+    "221 Bye\r\n",
+  ];
+  const transport: ByteDuplex = {
+    readable: new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = responses.shift();
+        if (next === undefined) controller.close();
+        else controller.enqueue(encoder.encode(next));
+      },
+    }),
+    writable: new WritableStream<Uint8Array>({
+      write(chunk) {
+        writes.push(new TextDecoder().decode(chunk));
+      },
+    }),
+    close() {},
+  };
+  return { transport, writes };
+}
+
+function extractVerificationCode(writes: string[]): string {
+  const match = writes.join("").match(
+    /Your mailecho verification code is: ([a-z0-9]{8})/,
+  );
+  if (!match) throw new Error("Verification code not found in SMTP output");
+  return match[1];
+}
+
+function adminFixture(): {
+  user: WebmailUser;
+  mailbox: MailboxRecord;
+  credential: MailboxCredential;
+} {
+  const user = fixtureUser(["webmail-users", "webmail-admin"]);
+  user.id = "user-admin";
+  user.subject = "subject-admin";
+  const mailbox: MailboxRecord = {
+    ...fixtureMailbox(),
+    id: "mailbox-admin",
+    address: "admin@example.com",
+    internalAddress: "admin@internal.example.com",
+    localPart: "admin",
+    ownerUserId: "user-admin",
+    credentialId: "credential-admin",
+  };
+  const credential: MailboxCredential = {
+    ...fixtureCredential(),
+    id: "credential-admin",
+    mailboxId: "mailbox-admin",
+  };
+  return { user, mailbox, credential };
+}
+
+Deno.test("registration request flows to approval and creates a mailbox", async () => {
+  const migadu = new FakeMigaduAdmin();
+  const runtime = testRuntime(testConfig(), migadu);
+  const user = fixtureUser();
+  const { accessToken } = await seedMailbox(
+    runtime,
+    user,
+    fixtureMailbox(),
+    fixtureCredential(),
+  );
+
+  const createResponse = await requestWithSession(
+    runtime,
+    "/v1/mailbox-registrations",
+    accessToken,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ local_part: "new-address" }),
+    },
+  );
+  assertEquals(createResponse.status, 201);
+  const created = await createResponse.json();
+  assertEquals(created.state, "pending");
+
+  const admin = adminFixture();
+  const { accessToken: adminToken } = await seedMailbox(
+    runtime,
+    admin.user,
+    admin.mailbox,
+    admin.credential,
+  );
+
+  const approveResponse = await requestWithSession(
+    runtime,
+    `/v1/admin/mailbox-registrations/${created.id}/approve`,
+    adminToken,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    },
+  );
+  assertEquals(approveResponse.status, 200);
+  assertEquals(migadu.mailboxCreates, 1);
+  const approved = await approveResponse.json();
+  assertEquals(approved.state, "approved");
+  assertEquals(approved.mailbox.ownerUserId, user.id);
+});
+
+Deno.test("registration approval is admin-only", async () => {
+  const runtime = testRuntime();
+  const user = fixtureUser();
+  const { accessToken } = await seedMailbox(
+    runtime,
+    user,
+    fixtureMailbox(),
+    fixtureCredential(),
+  );
+  await runtime.directory.putRegistrationRequest({
+    id: "reg-1",
+    userId: user.id,
+    localPart: "pending",
+    domain: "example.com",
+    address: "pending@example.com",
+    state: "pending",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  const response = await requestWithSession(
+    runtime,
+    "/v1/admin/mailbox-registrations/reg-1/approve",
+    accessToken,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) },
+  );
+  assertEquals(response.status, 403);
+});
+
+Deno.test("claim flow sends verification mail and attaches on the correct code", async () => {
+  const migadu = new FakeMigaduAdmin();
+  migadu.existingAddresses.add("claimed@example.com");
+  const runtime = testRuntime(testConfig(), migadu);
+  const user = fixtureUser();
+  const { accessToken } = await seedMailbox(
+    runtime,
+    user,
+    fixtureMailbox(),
+    fixtureCredential(),
+  );
+  const capture = smtpCapture();
+  runtime.connectSmtp = async () => capture.transport;
+
+  const claimResponse = await requestWithSession(
+    runtime,
+    "/v1/mailbox-claims",
+    accessToken,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address: "claimed@example.com" }),
+    },
+  );
+  assertEquals(claimResponse.status, 201);
+  const claim = await claimResponse.json();
+  assertEquals(claim.state, "pending_verification");
+  const code = extractVerificationCode(capture.writes);
+
+  const verifyResponse = await requestWithSession(
+    runtime,
+    `/v1/mailbox-claims/${claim.id}/verify`,
+    accessToken,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code }),
+    },
+  );
+  assertEquals(verifyResponse.status, 200);
+  const verified = await verifyResponse.json();
+  assertEquals(verified.state, "verified");
+  assertEquals(migadu.identityCreates, 1);
+  assertEquals(migadu.mailboxCreates, 0);
+  assertEquals(verified.mailbox.address, "claimed@example.com");
+});
+
+Deno.test("claim rejects an address that does not exist at the provider", async () => {
+  const migadu = new FakeMigaduAdmin();
+  const runtime = testRuntime(testConfig(), migadu);
+  const user = fixtureUser();
+  const { accessToken } = await seedMailbox(
+    runtime,
+    user,
+    fixtureMailbox(),
+    fixtureCredential(),
+  );
+  const response = await requestWithSession(
+    runtime,
+    "/v1/mailbox-claims",
+    accessToken,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address: "missing@example.com" }),
+    },
+  );
+  assertEquals(response.status, 409);
+  assertEquals((await response.json()).code, "ADDRESS_UNAVAILABLE");
+});
+
+Deno.test("webmail-user endpoints reject a disabled identity", async () => {
+  const runtime = testRuntime();
+  const user = fixtureUser();
+  user.enabled = false;
+  const { accessToken } = await seedMailbox(
+    runtime,
+    user,
+    fixtureMailbox(),
+    fixtureCredential(),
+  );
+  const response = await requestWithSession(
+    runtime,
+    "/v1/mailbox-registrations",
+    accessToken,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ local_part: "x" }),
+    },
+  );
+  assertEquals(response.status, 403);
+});
+
+Deno.test("me reports mailbox selection and pending counts", async () => {
+  const runtime = testRuntime();
+  const user = fixtureUser();
+  const { accessToken } = await seedMailbox(
+    runtime,
+    user,
+    fixtureMailbox(),
+    fixtureCredential(),
+  );
+  await runtime.directory.putRegistrationRequest({
+    id: "reg-2",
+    userId: user.id,
+    localPart: "pending",
+    domain: "example.com",
+    address: "pending@example.com",
+    state: "pending",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  const response = await requestWithSession(runtime, "/v1/me", accessToken);
+  assertEquals(response.status, 200);
+  const me = await response.json();
+  assertEquals(me.pending_registration_count, 1);
+  assertEquals(me.needs_mailbox_selection, false);
 });

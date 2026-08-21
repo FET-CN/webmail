@@ -37,6 +37,8 @@ export const SCRIPT_FILES = [
     'src/js/ui/view.js',
     'src/js/ui/login-view.js',
     'src/js/ui/account-view.js',
+    'src/js/ui/address-manage-view.js',
+    'src/js/ui/admin-approvals-view.js',
     'src/js/ui/mailbox-view.js',
     'src/js/ui/message-view.js',
     'src/js/ui/compose-view.js',

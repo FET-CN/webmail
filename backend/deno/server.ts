@@ -19,6 +19,8 @@ import { KvLocalMessageStore } from "../core/local-messages.ts";
 import { startRawWebSocketBridge } from "../cloudflare/websocket.ts";
 import { DenoKvProvisioningCoordinator } from "./provisioning-coordinator.ts";
 import { reconcileMailboxLifecycle } from "../core/mailbox-lifecycle.ts";
+import { reconcileClaimRequests } from "../core/mailbox-claim.ts";
+import { reconcileRegistrationRequests } from "../core/mailbox-registration.ts";
 import { isEmbeddedWebmailRequest } from "../core/embedded-webmail.ts";
 import { AppError } from "../core/errors.ts";
 
@@ -91,6 +93,12 @@ const isDenoDeploy = Boolean(
 function reconcileLifecycle(): void {
   void reconcileMailboxLifecycle(runtime).catch(() => {
     console.error("Mailbox lifecycle reconciliation failed.");
+  });
+  void reconcileClaimRequests(runtime).catch(() => {
+    console.error("Mailbox claim reconciliation failed.");
+  });
+  void reconcileRegistrationRequests(runtime).catch(() => {
+    console.error("Registration reconciliation failed.");
   });
 }
 

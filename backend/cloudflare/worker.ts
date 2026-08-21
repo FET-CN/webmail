@@ -24,6 +24,8 @@ import {
   ProvisioningLockObject,
 } from "./provisioning-coordinator.ts";
 import { reconcileMailboxLifecycle } from "../core/mailbox-lifecycle.ts";
+import { reconcileClaimRequests } from "../core/mailbox-claim.ts";
+import { reconcileRegistrationRequests } from "../core/mailbox-registration.ts";
 import { isEmbeddedWebmailRequest } from "../core/embedded-webmail.ts";
 
 export { ProvisioningLockObject };
@@ -232,5 +234,7 @@ export default {
     context: ExecutionContext,
   ): void {
     context.waitUntil(reconcileMailboxLifecycle(runtime(env)));
+    context.waitUntil(reconcileClaimRequests(runtime(env)));
+    context.waitUntil(reconcileRegistrationRequests(runtime(env)));
   },
 };

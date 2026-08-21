@@ -47,6 +47,12 @@ class _LoginView extends View {
     async loginFromSession(session) {
         request_notifications();
         document.querySelector('#init').style.display = "none";
+        if (session.needs_mailbox_selection) {
+            this.close();
+            window.AddressManageView = new _AddressManageView(session);
+            await window.AddressManageView.open();
+            return;
+        }
         const current = session.current_mailbox_id
             ? session.mailboxes?.find(item => item.id === session.current_mailbox_id)
             : null;

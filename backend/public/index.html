@@ -620,6 +620,119 @@ option {
     float:right;
 }
 
+/*                                                      address manage / approvals */
+.address-manage,
+.admin-approvals {
+    min-width: 40ch;
+}
+
+.address-manage form input[type=text],
+.admin-approvals form input[type=text] {
+    width: 100%;
+    max-width: 30rem;
+    box-sizing: border-box;
+    margin: 0.25em 0;
+}
+
+.address-manage .domain-suffix {
+    font-family: monospace;
+    margin-left: 0.25em;
+}
+
+.address-manage .suggested-block {
+    padding: 0.5em;
+    border: 1px solid #888;
+    margin: 0.5em 0;
+}
+
+.address-manage .accept-suggested,
+.address-manage .sendcode,
+.address-manage .resendcode,
+.address-manage .verify,
+.admin-approvals .approve,
+.admin-approvals .reject {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.address-manage .sendcode,
+.address-manage .resendcode {
+    margin-left: 0.5em;
+    font-size: smaller;
+}
+
+.address_requests,
+.approval_items {
+    list-style: none;
+    padding: 0;
+}
+
+.address_request,
+.approval_item {
+    padding: 0.5em 0 0.5em 0.5em;
+    margin: 0.5em 0;
+}
+
+.approval_item .actions {
+    float: right;
+    display: inline-block;
+    padding: 0 0.5em 0 1em;
+}
+
+.approval_item .requester {
+    margin-left: 1ch;
+    color: #999;
+}
+
+.status {
+    font-size: smaller;
+    margin-left: 1ch;
+    padding: 0.25em 0.5em;
+    border-radius: 0.5em;
+    white-space: nowrap;
+}
+
+.status-pending { background: #A77D19; }
+.status-approved, .status-verified { background: #2B9216; }
+.status-rejected { background: #C00505; }
+.status-expired { background: #666; }
+
+.approval-count {
+    font-size: smaller;
+    margin-left: 0.5ch;
+    padding: 0.2em 0.5em;
+    background: #A77D19;
+    border-radius: 0.5em;
+}
+
+.address-manage .response,
+.admin-approvals .response {
+    display: none;
+    padding: 0.5em;
+    margin: 0.5em 0;
+}
+
+.address-manage .response.err,
+.admin-approvals .response.err {
+    display: block;
+    background: rgba(192, 5, 5, 0.3);
+}
+
+.address-manage .response.success,
+.admin-approvals .response.success {
+    display: block;
+    background: rgba(43, 146, 22, 0.3);
+}
+
+.code-input {
+    font-family: monospace;
+    letter-spacing: 0.5ch;
+}
+
+.address-manage .verify {
+    margin-left: 1ch;
+}
+
 /*                                                      logs */
 
 .prompt.logs {
@@ -758,6 +871,8 @@ option {
                 <div class=mailboxes><!-- t-account-mailbox-list{,_empty} --></div>
                 <hr>
                 <a class=manage>Manage Mailboxes</a>
+                <a class=manage-addresses>Manage Email Addresses</a>
+                <a class="approvals hidden">Approvals <span class=approval-count></span></a>
                 <hr>
                 <a class=settings>Settings</a>
                 <a class=reconnect>Reconnect</a>
@@ -1141,6 +1256,74 @@ option {
                 <a class=delete>Delete</a>
             </div>
             <span class=mailbox_name></span>
+        </li>
+    </template>
+
+    <template id=t-address-manage-prompt>
+        <div class=content>
+            <p>Register a new address or claim an existing one. Registrations require administrator approval.</p>
+            <div class=suggested-block hidden>
+                <p class=suggested-text></p>
+                <a class=accept-suggested>Use this address</a>
+            </div>
+            <hr>
+            <h2>Register New Address</h2>
+            <div class=register-slot></div>
+            <hr>
+            <h2>Claim Existing Address</h2>
+            <div class=claim-slot></div>
+            <hr>
+            <h2>My Requests</h2>
+            <ul class=address_requests></ul>
+        </div>
+    </template>
+
+    <template id=t-address-register-form>
+        <form class=address-register-form>
+            <input name=local type=text placeholder="local-part" aria-label="Register address local part">
+            <span class=domain-suffix></span>
+            <input name=display type=text placeholder="Display name (optional)" aria-label="Display name">
+            <input type=submit value=Register>
+            <div class=response></div>
+        </form>
+    </template>
+
+    <template id=t-address-claim-form>
+        <form class=address-claim-form>
+            <input name=address type=text placeholder="full address" aria-label="Claim address">
+            <span class=sendcode>Send Code</span>
+            <input name=code type=text class=code-input placeholder="verification code" aria-label="Verification code" hidden>
+            <span class=resendcode hidden>Resend Code</span>
+            <input type=submit value="Claim Address">
+            <div class=response></div>
+        </form>
+    </template>
+
+    <template id=t-address-request-item>
+        <li class=address_request>
+            <span class=address></span>
+            <span class=kind></span>
+            <span class=status></span>
+            <a class=verify hidden>Enter code</a>
+        </li>
+    </template>
+
+    <template id=t-admin-approvals-prompt>
+        <div class=content>
+            <h2>Pending Approvals</h2>
+            <ul class=approval_items><!-- t-admin-approval-item --></ul>
+        </div>
+    </template>
+
+    <template id=t-admin-approval-item>
+        <li class=approval_item>
+            <div class=actions>
+                <a class=approve>Approve</a>&nbsp;
+                <a class=reject>Reject</a>
+            </div>
+            <span class=address></span>
+            <span class=requester></span>
+            <time class=date></time>
         </li>
     </template>
 </div>
@@ -5531,6 +5714,12 @@ class _LoginView extends View {
     async loginFromSession(session) {
         request_notifications();
         document.querySelector('#init').style.display = "none";
+        if (session.needs_mailbox_selection) {
+            this.close();
+            window.AddressManageView = new _AddressManageView(session);
+            await window.AddressManageView.open();
+            return;
+        }
         const current = session.current_mailbox_id
             ? session.mailboxes?.find(item => item.id === session.current_mailbox_id)
             : null;
@@ -5576,13 +5765,16 @@ class _LoginView extends View {
 
 <script data-source="src/js/ui/account-view.js" type="text/javascript">
 class _AccountView extends View {
-    constructor(imap, accounts = [], currentAccountId = null) {
+    constructor(imap, accounts = [], currentAccountId = null, session = null) {
         super('account');
 
         this.imap = imap;
         this.accounts = accounts;
         this.currentAccountId = currentAccountId;
         this.currentAccount = accounts.find(account => account.id === currentAccountId) || null;
+        this.session = session;
+        this.admin = session?.admin === true;
+        this.pendingCounts = session?.admin_pending_registration_count || 0;
         this.imap.onlogin = this.onLogin;
         this.imap.onclose = this.onClose;
 
@@ -5611,6 +5803,8 @@ class _AccountView extends View {
         this.el.querySelector('.support')?.addEventListener('click', this.onClickSupport);
         this.el.querySelector('.logs')?.addEventListener('click', this.onClickLogs);
         this.el.querySelector('.manage')?.addEventListener('click', this.onClickManageMailboxes);
+        this.el.querySelector('.manage-addresses')?.addEventListener('click', this.onClickManageAddresses);
+        this.el.querySelector('.approvals')?.addEventListener('click', this.onClickApprovals);
         this.el.querySelector('.account-select')?.addEventListener('change', this.onAccountChange);
     }
 
@@ -5629,6 +5823,15 @@ class _AccountView extends View {
     }
 
     draw = () => {
+        this.el.querySelectorAll('.approvals').forEach(e => {
+            if (this.admin) {
+                e.classList.remove('hidden');
+                e.querySelector('.approval-count').innerText =
+                    this.pendingCounts ? `(${this.pendingCounts})` : '';
+            } else {
+                e.classList.add('hidden');
+            }
+        });
         const selector = this.el.querySelector('.account-select');
         if(selector && this.accounts.length && selector.options.length === 0) {
             for(const account of this.accounts) {
@@ -5991,6 +6194,16 @@ class _AccountView extends View {
         await window.MailboxManageView.open();
     }
 
+    onClickManageAddresses = async () => {
+        window.AddressManageView = new _AddressManageView(this.session);
+        await window.AddressManageView.open();
+    }
+
+    onClickApprovals = async () => {
+        window.AdminApprovalsView = new _AdminApprovalsView();
+        await window.AdminApprovalsView.open();
+    }
+
     onClickMailbox = async (mailbox) => {
         await this.openMailbox(mailbox);
     }
@@ -6004,6 +6217,405 @@ class _AccountView extends View {
         old_mailbox?.close();
         await window.MailboxView.open();
         await this.drawMailboxInfo(mailbox,this.mailboxes[mailbox.mailbox]);
+    }
+}
+</script>
+
+<script data-source="src/js/ui/address-manage-view.js" type="text/javascript">
+class _AddressManageView extends View {
+    constructor(session = null) {
+        super('prompt');
+        this.el.classList.add('address-manage');
+        this._el = template('address-manage-prompt');
+        this.el.appendChild(this._el);
+
+        this.session = session;
+        this.needsSelection = Boolean(session?.needs_mailbox_selection);
+        this.suggestedAddress = session?.suggested_address || null;
+        this.claimId = null;
+
+        this.el.querySelectorAll('.title').forEach(e => {
+            e.innerText = this.needsSelection
+                ? 'Choose a mailbox address'
+                : 'Manage Email Addresses';
+        });
+        this.el.querySelectorAll('.close').forEach(e => {
+            e.addEventListener('click', this.close.bind(this));
+        });
+
+        this.buildRegisterForm();
+        this.buildClaimForm();
+        this.buildSuggested();
+    }
+
+    async open() {
+        await super.open();
+        await this.draw();
+    }
+
+    async close() {
+        super.close();
+        delete window.AddressManageView;
+    }
+
+    domain() {
+        return this.suggestedAddress?.split('@')[1]
+            || this.session?.mailboxes?.[0]?.address?.split('@')[1]
+            || '';
+    }
+
+    buildRegisterForm() {
+        const form = template('address-register-form');
+        const domain = this.domain();
+        form.querySelectorAll('.domain-suffix').forEach(e => {
+            e.innerText = domain ? '@' + domain : '';
+        });
+        form.addEventListener('submit', this.onRegister.bind(this));
+        this.el.querySelector('.register-slot').appendChild(form);
+    }
+
+    buildClaimForm() {
+        const form = template('address-claim-form');
+        form.addEventListener('submit', this.onClaim.bind(this));
+        form.querySelector('.sendcode').addEventListener(
+            'click',
+            this.onSendCode.bind(this, form),
+        );
+        form.querySelector('.resendcode').addEventListener(
+            'click',
+            this.onSendCode.bind(this, form),
+        );
+        this.el.querySelector('.claim-slot').appendChild(form);
+    }
+
+    buildSuggested() {
+        const block = this.el.querySelector('.suggested-block');
+        if (!this.needsSelection || !this.suggestedAddress) return;
+        block.classList.remove('hidden');
+        block.querySelector('.suggested-text').innerText =
+            `Your username address is taken. Use ${this.suggestedAddress} instead.`;
+        block.querySelector('.accept-suggested').addEventListener(
+            'click',
+            this.onAcceptSuggested.bind(this),
+        );
+    }
+
+    async onAcceptSuggested() {
+        await set_status('Creating mailbox', 'LOAD');
+        const response = await apiFetch('/v1/session/accept-suggested-mailbox', {
+            method: 'POST',
+        });
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            const error = await response.json().catch(() => ({}));
+            await set_status(
+                'ERR',
+                null,
+                new Error(error.detail || 'Unable to create the suggested mailbox.'),
+            );
+        }
+    }
+
+    async onRegister(event) {
+        event.preventDefault();
+        const form = event.target;
+        const local = form.querySelector('input[name=local]').value.trim();
+        const display = form.querySelector('input[name=display]').value.trim();
+        const response = await apiFetch('/v1/mailbox-registrations', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                local_part: local,
+                name: display || undefined,
+            }),
+        });
+        const feedback = form.querySelector('.response');
+        if (response.ok) {
+            feedback.innerText = 'Submitted. Waiting for administrator approval.';
+            feedback.className = 'response success';
+            form.querySelector('input[name=local]').value = '';
+            form.querySelector('input[name=display]').value = '';
+            await this.draw();
+        } else {
+            const error = await response.json().catch(() => ({}));
+            feedback.innerText = error.detail || 'Registration failed.';
+            feedback.className = 'response err';
+        }
+    }
+
+    async onSendCode(form) {
+        const address = form.querySelector('input[name=address]').value.trim();
+        if (!address) return;
+        const response = await apiFetch('/v1/mailbox-claims', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ address }),
+        });
+        const feedback = form.querySelector('.response');
+        if (response.ok) {
+            const claim = await response.json();
+            this.claimId = claim.id;
+            feedback.innerText = 'Verification code sent.';
+            feedback.className = 'response success';
+            form.querySelector('input[name=code]').hidden = false;
+            form.querySelector('.resendcode').hidden = false;
+            form.querySelector('.sendcode').hidden = true;
+        } else {
+            const error = await response.json().catch(() => ({}));
+            feedback.innerText = error.detail || 'Unable to send verification code.';
+            feedback.className = 'response err';
+        }
+    }
+
+    async onClaim(event) {
+        event.preventDefault();
+        const form = event.target;
+        const code = form.querySelector('input[name=code]').value.trim();
+        if (!this.claimId) {
+            form.querySelector('.response').innerText =
+                'Send a verification code first.';
+            form.querySelector('.response').className = 'response err';
+            return;
+        }
+        const response = await apiFetch(`/v1/mailbox-claims/${this.claimId}/verify`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+        const feedback = form.querySelector('.response');
+        if (response.ok) {
+            const result = await response.json();
+            if (result.mailbox) {
+                await this.switchToMailbox(result.mailbox.id);
+            } else {
+                feedback.innerText = 'Claim verified. Completing...';
+                feedback.className = 'response success';
+                await this.draw();
+            }
+        } else {
+            const error = await response.json().catch(() => ({}));
+            feedback.innerText = error.detail || 'Verification failed.';
+            feedback.className = 'response err';
+        }
+    }
+
+    async switchToMailbox(mailboxId) {
+        const selected = await apiFetch('/v1/session/select', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ mailbox_id: mailboxId }),
+        });
+        if (selected.ok) window.location.reload();
+        else await set_status('ERR', null, new Error('Unable to switch mailbox.'));
+    }
+
+    async verifyClaim(id, address) {
+        const code = await prompt(
+            'Verification code',
+            `Enter the code sent to ${address}`,
+        );
+        if (!code) return;
+        const response = await apiFetch(`/v1/mailbox-claims/${id}/verify`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+        if (response.ok) {
+            const result = await response.json();
+            if (result.mailbox) {
+                await this.switchToMailbox(result.mailbox.id);
+                return;
+            }
+        } else {
+            const error = await response.json().catch(() => ({}));
+            alert(error.detail || 'Verification failed.');
+        }
+        await this.draw();
+    }
+
+    async draw() {
+        const list = this.el.querySelector('.address_requests');
+        list.replaceChildren();
+
+        const [regResponse, claimResponse] = await Promise.all([
+            apiFetch('/v1/mailbox-registrations'),
+            apiFetch('/v1/mailbox-claims'),
+        ]);
+        const registrations = regResponse.ok
+            ? (await regResponse.json()).data || []
+            : [];
+        const claims = claimResponse.ok ? (await claimResponse.json()).data || [] : [];
+
+        const items = [
+            ...registrations.map(r => ({
+                address: r.address,
+                kind: 'register',
+                state: r.state,
+                id: r.id,
+                isClaim: false,
+            })),
+            ...claims.map(c => ({
+                address: c.address,
+                kind: 'claim',
+                state: c.state,
+                id: c.id,
+                isClaim: true,
+            })),
+        ];
+
+        if (!items.length) {
+            const empty = document.createElement('div');
+            empty.className = 'content';
+            empty.innerText = 'No requests yet';
+            list.appendChild(empty);
+            return;
+        }
+
+        for (const item of items) {
+            const entry = template('address-request-item');
+            entry.querySelector('.address').innerText = item.address;
+            entry.querySelector('.kind').innerText = item.kind;
+            const status = entry.querySelector('.status');
+            const label = this.statusLabel(item.state);
+            status.innerText = label.text;
+            status.className = 'status ' + label.class;
+            if (item.isClaim && item.state === 'pending_verification') {
+                const verify = entry.querySelector('.verify');
+                verify.hidden = false;
+                verify.addEventListener('click', () =>
+                    this.verifyClaim(item.id, item.address));
+            }
+            list.appendChild(entry);
+        }
+    }
+
+    statusLabel(state) {
+        switch (state) {
+            case 'pending':
+                return { text: 'waiting for approval', class: 'status-pending' };
+            case 'approved':
+                return { text: 'approved', class: 'status-approved' };
+            case 'rejected':
+                return { text: 'rejected', class: 'status-rejected' };
+            case 'pending_verification':
+                return { text: 'awaiting code', class: 'status-pending' };
+            case 'verified':
+                return { text: 'verified', class: 'status-verified' };
+            case 'expired':
+                return { text: 'expired', class: 'status-expired' };
+            default:
+                return { text: state, class: 'status-pending' };
+        }
+    }
+}
+</script>
+
+<script data-source="src/js/ui/admin-approvals-view.js" type="text/javascript">
+class _AdminApprovalsView extends View {
+    constructor() {
+        super('prompt');
+        this.el.classList.add('admin-approvals');
+        this._el = template('admin-approvals-prompt');
+        this.el.appendChild(this._el);
+
+        this.el.querySelectorAll('.title').forEach(e => {
+            e.innerText = 'Approvals';
+        });
+        this.el.querySelectorAll('.close').forEach(e => {
+            e.addEventListener('click', this.close.bind(this));
+        });
+    }
+
+    async open() {
+        await super.open();
+        await this.draw();
+    }
+
+    async close() {
+        super.close();
+        delete window.AdminApprovalsView;
+    }
+
+    async draw() {
+        const list = this.el.querySelector('.approval_items');
+        list.replaceChildren();
+
+        const response = await apiFetch(
+            '/v1/admin/mailbox-registrations?state=pending',
+        );
+        if (!response.ok) {
+            const empty = document.createElement('div');
+            empty.className = 'content';
+            empty.innerText = 'Unable to load approvals.';
+            list.appendChild(empty);
+            return;
+        }
+        const requests = (await response.json()).data || [];
+        if (!requests.length) {
+            const empty = document.createElement('div');
+            empty.className = 'content';
+            empty.innerText = 'No pending approvals';
+            list.appendChild(empty);
+            return;
+        }
+        for (const request of requests) {
+            const entry = template('admin-approval-item');
+            entry.querySelector('.address').innerText = request.address;
+            entry.querySelector('.requester').innerText =
+                request.requester_username || request.userId;
+            entry.querySelector('.date').innerText = request.createdAt;
+            entry.querySelector('.approve').addEventListener('click', () =>
+                this.onApprove(request.id, entry));
+            entry.querySelector('.reject').addEventListener('click', () =>
+                this.onReject(request.id, entry));
+            list.appendChild(entry);
+        }
+    }
+
+    async onApprove(id, entry) {
+        await set_status('Approving registration', 'LOAD');
+        const response = await apiFetch(
+            `/v1/admin/mailbox-registrations/${id}/approve`,
+            {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({}),
+            },
+        );
+        if (response.ok) {
+            entry.remove();
+            window.dispatchEvent(new CustomEvent('address-requests-changed'));
+            await set_status('OK');
+        } else {
+            const error = await response.json().catch(() => ({}));
+            alert(error.detail || 'Approval failed.');
+            await set_status('ERR', null, new Error(error.detail || 'Approval failed.'));
+        }
+        await this.draw();
+    }
+
+    async onReject(id, entry) {
+        if (!confirm('Reject this registration request?')) return;
+        await set_status('Rejecting registration', 'LOAD');
+        const response = await apiFetch(
+            `/v1/admin/mailbox-registrations/${id}/reject`,
+            {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({}),
+            },
+        );
+        if (response.ok) {
+            entry.remove();
+            window.dispatchEvent(new CustomEvent('address-requests-changed'));
+            await set_status('OK');
+        } else {
+            const error = await response.json().catch(() => ({}));
+            alert(error.detail || 'Rejection failed.');
+            await set_status('ERR', null, new Error(error.detail || 'Rejection failed.'));
+        }
+        await this.draw();
     }
 }
 </script>

@@ -20,6 +20,14 @@ const guidance: Record<ProblemCode, string> = {
   INVALID_CURSOR: "Restart pagination from the first page.",
   SYNC_REQUIRED: "Refresh the mailbox to rebuild synchronization state.",
   PROBLEM_TYPE_NOT_FOUND: "Verify the problem type URL and try again.",
+  ADDRESS_UNAVAILABLE:
+    "Choose a different address, or register it if it does not exist yet.",
+  ADDRESS_ALREADY_BOUND:
+    "Choose a different address, or ask an administrator to reassign it.",
+  ADDRESS_PENDING_CLAIM: "Wait for the pending claim to resolve, then try again.",
+  REGISTRATION_DUPLICATE: "The address is already pending registration.",
+  VERIFICATION_FAILED: "Re-enter the verification code, or request a new one.",
+  VERIFICATION_EXPIRED: "Request a new verification code and try again.",
 };
 
 export function problemDocument(

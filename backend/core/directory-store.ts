@@ -1,8 +1,10 @@
 import type { KeyValueStore } from "./session-kv.ts";
 import type {
   AuditEvent,
+  MailboxClaimRequest,
   MailboxGrant,
   MailboxRecord,
+  RegistrationRequest,
   WebmailUser,
 } from "./domain.ts";
 
@@ -26,11 +28,27 @@ export interface DirectoryStore {
   deleteGrant(userId: string, mailboxId: string): Promise<void>;
   appendAudit(event: AuditEvent): Promise<void>;
   listAudit(): Promise<AuditEvent[]>;
+  putRegistrationRequest(request: RegistrationRequest): Promise<void>;
+  getRegistrationRequest(id: string): Promise<RegistrationRequest | null>;
+  listRegistrationRequestsForUser(userId: string): Promise<RegistrationRequest[]>;
+  listPendingRegistrationRequests(): Promise<RegistrationRequest[]>;
+  listRegistrationRequests(): Promise<RegistrationRequest[]>;
+  deleteRegistrationRequest(id: string): Promise<void>;
+  putMailboxClaimRequest(request: MailboxClaimRequest): Promise<void>;
+  getMailboxClaimRequest(id: string): Promise<MailboxClaimRequest | null>;
+  listMailboxClaimRequestsForUser(userId: string): Promise<MailboxClaimRequest[]>;
+  listPendingMailboxClaimRequests(): Promise<MailboxClaimRequest[]>;
+  deleteMailboxClaimRequest(id: string): Promise<void>;
 }
 
 function encode(value: string): string {
   return encodeURIComponent(value);
 }
+
+// Registration/claim requests are short-lived pending state; a shorter TTL
+// (72h) than directory records keeps Deno KV list scans from accumulating
+// stale records until reconcile clears them.
+const REQUEST_TTL_SECONDS = 72 * 60 * 60;
 
 export class KvDirectoryStore implements DirectoryStore {
   constructor(private readonly storage: KeyValueStore) {}
@@ -40,8 +58,12 @@ export class KvDirectoryStore implements DirectoryStore {
     return value ? JSON.parse(value) as T : null;
   }
 
-  private async write(key: string, value: unknown): Promise<void> {
-    await this.storage.put(key, JSON.stringify(value), 31_536_000);
+  private async write(
+    key: string,
+    value: unknown,
+    ttlSeconds = 31_536_000,
+  ): Promise<void> {
+    await this.storage.put(key, JSON.stringify(value), ttlSeconds);
   }
 
   private async keys(prefix: string): Promise<string[]> {
@@ -187,6 +209,157 @@ export class KvDirectoryStore implements DirectoryStore {
       left.createdAt.localeCompare(right.createdAt)
     );
   }
+
+  async putRegistrationRequest(request: RegistrationRequest): Promise<void> {
+    await this.write(
+      `directory:registration:${encode(request.id)}`,
+      request,
+      REQUEST_TTL_SECONDS,
+    );
+    await this.write(
+      `directory:registration-user:${encode(request.userId)}:${
+        encode(request.id)
+      }`,
+      request.id,
+      REQUEST_TTL_SECONDS,
+    );
+    if (request.state === "pending") {
+      await this.write(
+        `directory:registration-pending:${encode(request.id)}`,
+        request.id,
+        REQUEST_TTL_SECONDS,
+      );
+    } else {
+      await this.storage.delete(
+        `directory:registration-pending:${encode(request.id)}`,
+      );
+    }
+  }
+
+  async getRegistrationRequest(
+    id: string,
+  ): Promise<RegistrationRequest | null> {
+    return this.read<RegistrationRequest>(
+      `directory:registration:${encode(id)}`,
+    );
+  }
+
+  async listRegistrationRequestsForUser(
+    userId: string,
+  ): Promise<RegistrationRequest[]> {
+    const result: RegistrationRequest[] = [];
+    for (
+      const key of await this.keys(
+        `directory:registration-user:${encode(userId)}:`,
+      )
+    ) {
+      const id = await this.read<string>(key);
+      if (id) {
+        const request = await this.getRegistrationRequest(id);
+        if (request) result.push(request);
+      }
+    }
+    return result;
+  }
+
+  async listPendingRegistrationRequests(): Promise<RegistrationRequest[]> {
+    const result: RegistrationRequest[] = [];
+    for (const key of await this.keys("directory:registration-pending:")) {
+      const id = await this.read<string>(key);
+      if (id) {
+        const request = await this.getRegistrationRequest(id);
+        if (request) result.push(request);
+      }
+    }
+    return result;
+  }
+
+  async listRegistrationRequests(): Promise<RegistrationRequest[]> {
+    const result: RegistrationRequest[] = [];
+    for (const key of await this.keys("directory:registration:")) {
+      const request = await this.read<RegistrationRequest>(key);
+      if (request) result.push(request);
+    }
+    return result;
+  }
+
+  async deleteRegistrationRequest(id: string): Promise<void> {
+    const request = await this.getRegistrationRequest(id);
+    await this.storage.delete(`directory:registration:${encode(id)}`);
+    if (request) {
+      await this.storage.delete(
+        `directory:registration-user:${encode(request.userId)}:${encode(id)}`,
+      );
+    }
+    await this.storage.delete(`directory:registration-pending:${encode(id)}`);
+  }
+
+  async putMailboxClaimRequest(request: MailboxClaimRequest): Promise<void> {
+    await this.write(
+      `directory:claim:${encode(request.id)}`,
+      request,
+      REQUEST_TTL_SECONDS,
+    );
+    await this.write(
+      `directory:claim-user:${encode(request.userId)}:${encode(request.id)}`,
+      request.id,
+      REQUEST_TTL_SECONDS,
+    );
+    if (request.state === "pending_verification") {
+      await this.write(
+        `directory:claim-pending:${encode(request.id)}`,
+        request.id,
+        REQUEST_TTL_SECONDS,
+      );
+    } else {
+      await this.storage.delete(`directory:claim-pending:${encode(request.id)}`);
+    }
+  }
+
+  async getMailboxClaimRequest(
+    id: string,
+  ): Promise<MailboxClaimRequest | null> {
+    return this.read<MailboxClaimRequest>(`directory:claim:${encode(id)}`);
+  }
+
+  async listMailboxClaimRequestsForUser(
+    userId: string,
+  ): Promise<MailboxClaimRequest[]> {
+    const result: MailboxClaimRequest[] = [];
+    for (
+      const key of await this.keys(`directory:claim-user:${encode(userId)}:`)
+    ) {
+      const id = await this.read<string>(key);
+      if (id) {
+        const request = await this.getMailboxClaimRequest(id);
+        if (request) result.push(request);
+      }
+    }
+    return result;
+  }
+
+  async listPendingMailboxClaimRequests(): Promise<MailboxClaimRequest[]> {
+    const result: MailboxClaimRequest[] = [];
+    for (const key of await this.keys("directory:claim-pending:")) {
+      const id = await this.read<string>(key);
+      if (id) {
+        const request = await this.getMailboxClaimRequest(id);
+        if (request) result.push(request);
+      }
+    }
+    return result;
+  }
+
+  async deleteMailboxClaimRequest(id: string): Promise<void> {
+    const request = await this.getMailboxClaimRequest(id);
+    await this.storage.delete(`directory:claim:${encode(id)}`);
+    if (request) {
+      await this.storage.delete(
+        `directory:claim-user:${encode(request.userId)}:${encode(id)}`,
+      );
+    }
+    await this.storage.delete(`directory:claim-pending:${encode(id)}`);
+  }
 }
 
 export class MemoryDirectoryStore implements DirectoryStore {
@@ -197,6 +370,8 @@ export class MemoryDirectoryStore implements DirectoryStore {
   private readonly internalAddresses = new Map<string, string>();
   private readonly grants = new Map<string, MailboxGrant>();
   private readonly audit: AuditEvent[] = [];
+  private readonly registrations = new Map<string, RegistrationRequest>();
+  private readonly claims = new Map<string, MailboxClaimRequest>();
 
   async getUser(id: string): Promise<WebmailUser | null> {
     return this.users.get(id) || null;
@@ -272,5 +447,46 @@ export class MemoryDirectoryStore implements DirectoryStore {
     return [...this.audit].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt)
     );
+  }
+
+  async putRegistrationRequest(request: RegistrationRequest): Promise<void> {
+    this.registrations.set(request.id, request);
+  }
+  async getRegistrationRequest(id: string): Promise<RegistrationRequest | null> {
+    return this.registrations.get(id) || null;
+  }
+  async listRegistrationRequestsForUser(
+    userId: string,
+  ): Promise<RegistrationRequest[]> {
+    return [...this.registrations.values()].filter((r) => r.userId === userId);
+  }
+  async listPendingRegistrationRequests(): Promise<RegistrationRequest[]> {
+    return [...this.registrations.values()].filter((r) => r.state === "pending");
+  }
+  async listRegistrationRequests(): Promise<RegistrationRequest[]> {
+    return [...this.registrations.values()];
+  }
+  async deleteRegistrationRequest(id: string): Promise<void> {
+    this.registrations.delete(id);
+  }
+
+  async putMailboxClaimRequest(request: MailboxClaimRequest): Promise<void> {
+    this.claims.set(request.id, request);
+  }
+  async getMailboxClaimRequest(id: string): Promise<MailboxClaimRequest | null> {
+    return this.claims.get(id) || null;
+  }
+  async listMailboxClaimRequestsForUser(
+    userId: string,
+  ): Promise<MailboxClaimRequest[]> {
+    return [...this.claims.values()].filter((c) => c.userId === userId);
+  }
+  async listPendingMailboxClaimRequests(): Promise<MailboxClaimRequest[]> {
+    return [...this.claims.values()].filter((c) =>
+      c.state === "pending_verification"
+    );
+  }
+  async deleteMailboxClaimRequest(id: string): Promise<void> {
+    this.claims.delete(id);
   }
 }

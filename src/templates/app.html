@@ -45,6 +45,8 @@
                 <div class=mailboxes><!-- t-account-mailbox-list{,_empty} --></div>
                 <hr>
                 <a class=manage>Manage Mailboxes</a>
+                <a class=manage-addresses>Manage Email Addresses</a>
+                <a class="approvals hidden">Approvals <span class=approval-count></span></a>
                 <hr>
                 <a class=settings>Settings</a>
                 <a class=reconnect>Reconnect</a>
@@ -428,6 +430,74 @@
                 <a class=delete>Delete</a>
             </div>
             <span class=mailbox_name></span>
+        </li>
+    </template>
+
+    <template id=t-address-manage-prompt>
+        <div class=content>
+            <p>Register a new address or claim an existing one. Registrations require administrator approval.</p>
+            <div class=suggested-block hidden>
+                <p class=suggested-text></p>
+                <a class=accept-suggested>Use this address</a>
+            </div>
+            <hr>
+            <h2>Register New Address</h2>
+            <div class=register-slot></div>
+            <hr>
+            <h2>Claim Existing Address</h2>
+            <div class=claim-slot></div>
+            <hr>
+            <h2>My Requests</h2>
+            <ul class=address_requests></ul>
+        </div>
+    </template>
+
+    <template id=t-address-register-form>
+        <form class=address-register-form>
+            <input name=local type=text placeholder="local-part" aria-label="Register address local part">
+            <span class=domain-suffix></span>
+            <input name=display type=text placeholder="Display name (optional)" aria-label="Display name">
+            <input type=submit value=Register>
+            <div class=response></div>
+        </form>
+    </template>
+
+    <template id=t-address-claim-form>
+        <form class=address-claim-form>
+            <input name=address type=text placeholder="full address" aria-label="Claim address">
+            <span class=sendcode>Send Code</span>
+            <input name=code type=text class=code-input placeholder="verification code" aria-label="Verification code" hidden>
+            <span class=resendcode hidden>Resend Code</span>
+            <input type=submit value="Claim Address">
+            <div class=response></div>
+        </form>
+    </template>
+
+    <template id=t-address-request-item>
+        <li class=address_request>
+            <span class=address></span>
+            <span class=kind></span>
+            <span class=status></span>
+            <a class=verify hidden>Enter code</a>
+        </li>
+    </template>
+
+    <template id=t-admin-approvals-prompt>
+        <div class=content>
+            <h2>Pending Approvals</h2>
+            <ul class=approval_items><!-- t-admin-approval-item --></ul>
+        </div>
+    </template>
+
+    <template id=t-admin-approval-item>
+        <li class=approval_item>
+            <div class=actions>
+                <a class=approve>Approve</a>&nbsp;
+                <a class=reject>Reject</a>
+            </div>
+            <span class=address></span>
+            <span class=requester></span>
+            <time class=date></time>
         </li>
     </template>
 </div>

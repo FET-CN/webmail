@@ -64,3 +64,40 @@ export interface MailboxCredential {
   keyVersion: number;
   createdAt: string;
 }
+
+export type RegistrationRequestState = "pending" | "approved" | "rejected";
+
+export interface RegistrationRequest {
+  id: string;
+  userId: string;
+  localPart: string;
+  domain: string;
+  address: string;
+  name?: string;
+  state: RegistrationRequestState;
+  mailboxId?: string;
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClaimRequestState = "pending_verification" | "verified" | "expired";
+
+export interface MailboxClaimRequest {
+  id: string;
+  userId: string;
+  localPart: string;
+  domain: string;
+  address: string;
+  state: ClaimRequestState;
+  tokenHash: string;
+  tokenExpiresAt: string;
+  attempts: number;
+  verificationMailSentAt: string;
+  mailboxId?: string;
+  claimedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}

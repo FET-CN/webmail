@@ -7,8 +7,8 @@ export interface SessionRecord {
   userId: string;
   issuer: string;
   subject: string;
-  mailboxId: string;
-  credentialId: string;
+  mailboxId?: string;
+  credentialId?: string;
   refreshJti: string;
   refreshFamily: string;
   identityValidatedAt: number;
@@ -73,8 +73,8 @@ export class SessionService {
       userId: string;
       issuer: string;
       subject: string;
-      mailboxId: string;
-      credentialId: string;
+      mailboxId?: string;
+      credentialId?: string;
       identityValidatedAt?: number;
     },
   ): Promise<

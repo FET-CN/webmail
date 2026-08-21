@@ -136,6 +136,16 @@ Migadu mailbox, remove grants, and retry safely after transient failures.
 Credential rotation stores and switches the replacement identity before retiring
 the old one.
 
+A single identity can own multiple mailboxes. Beyond the primary mailbox that
+the first callback provisions, users may claim an existing Migadu address or
+register a new one. Claiming sends a verification code to the address; entering
+the code attaches a backend identity and owner grant without creating (or, on
+failure, deleting) the remote mailbox. Registration enters an admin approval
+queue (`webmail-admin`); approval creates the mailbox and grant. If a first
+login's username-derived address is already bound to another identity, the
+identity lands on a mailbox-selection screen instead of failing and may accept a
+backend-generated suggested address, register, or claim.
+
 The Cloudflare Worker starts the raw bridge immediately after
 `WebSocketPair.server.accept()`. An accepted server socket is already usable;
 waiting for an `open` event would leave the 101 connection without an upstream

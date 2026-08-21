@@ -1,11 +1,14 @@
 class _AccountView extends View {
-    constructor(imap, accounts = [], currentAccountId = null) {
+    constructor(imap, accounts = [], currentAccountId = null, session = null) {
         super('account');
 
         this.imap = imap;
         this.accounts = accounts;
         this.currentAccountId = currentAccountId;
         this.currentAccount = accounts.find(account => account.id === currentAccountId) || null;
+        this.session = session;
+        this.admin = session?.admin === true;
+        this.pendingCounts = session?.admin_pending_registration_count || 0;
         this.imap.onlogin = this.onLogin;
         this.imap.onclose = this.onClose;
 
@@ -34,6 +37,8 @@ class _AccountView extends View {
         this.el.querySelector('.support')?.addEventListener('click', this.onClickSupport);
         this.el.querySelector('.logs')?.addEventListener('click', this.onClickLogs);
         this.el.querySelector('.manage')?.addEventListener('click', this.onClickManageMailboxes);
+        this.el.querySelector('.manage-addresses')?.addEventListener('click', this.onClickManageAddresses);
+        this.el.querySelector('.approvals')?.addEventListener('click', this.onClickApprovals);
         this.el.querySelector('.account-select')?.addEventListener('change', this.onAccountChange);
     }
 
@@ -52,6 +57,15 @@ class _AccountView extends View {
     }
 
     draw = () => {
+        this.el.querySelectorAll('.approvals').forEach(e => {
+            if (this.admin) {
+                e.classList.remove('hidden');
+                e.querySelector('.approval-count').innerText =
+                    this.pendingCounts ? `(${this.pendingCounts})` : '';
+            } else {
+                e.classList.add('hidden');
+            }
+        });
         const selector = this.el.querySelector('.account-select');
         if(selector && this.accounts.length && selector.options.length === 0) {
             for(const account of this.accounts) {
@@ -412,6 +426,16 @@ class _AccountView extends View {
     onClickManageMailboxes = async () => {
         window.MailboxManageView = new _MailboxManageView();
         await window.MailboxManageView.open();
+    }
+
+    onClickManageAddresses = async () => {
+        window.AddressManageView = new _AddressManageView(this.session);
+        await window.AddressManageView.open();
+    }
+
+    onClickApprovals = async () => {
+        window.AdminApprovalsView = new _AdminApprovalsView();
+        await window.AdminApprovalsView.open();
     }
 
     onClickMailbox = async (mailbox) => {

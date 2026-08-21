@@ -114,6 +114,119 @@
     float:right;
 }
 
+/*                                                      address manage / approvals */
+.address-manage,
+.admin-approvals {
+    min-width: 40ch;
+}
+
+.address-manage form input[type=text],
+.admin-approvals form input[type=text] {
+    width: 100%;
+    max-width: 30rem;
+    box-sizing: border-box;
+    margin: 0.25em 0;
+}
+
+.address-manage .domain-suffix {
+    font-family: monospace;
+    margin-left: 0.25em;
+}
+
+.address-manage .suggested-block {
+    padding: 0.5em;
+    border: 1px solid #888;
+    margin: 0.5em 0;
+}
+
+.address-manage .accept-suggested,
+.address-manage .sendcode,
+.address-manage .resendcode,
+.address-manage .verify,
+.admin-approvals .approve,
+.admin-approvals .reject {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.address-manage .sendcode,
+.address-manage .resendcode {
+    margin-left: 0.5em;
+    font-size: smaller;
+}
+
+.address_requests,
+.approval_items {
+    list-style: none;
+    padding: 0;
+}
+
+.address_request,
+.approval_item {
+    padding: 0.5em 0 0.5em 0.5em;
+    margin: 0.5em 0;
+}
+
+.approval_item .actions {
+    float: right;
+    display: inline-block;
+    padding: 0 0.5em 0 1em;
+}
+
+.approval_item .requester {
+    margin-left: 1ch;
+    color: #999;
+}
+
+.status {
+    font-size: smaller;
+    margin-left: 1ch;
+    padding: 0.25em 0.5em;
+    border-radius: 0.5em;
+    white-space: nowrap;
+}
+
+.status-pending { background: #A77D19; }
+.status-approved, .status-verified { background: #2B9216; }
+.status-rejected { background: #C00505; }
+.status-expired { background: #666; }
+
+.approval-count {
+    font-size: smaller;
+    margin-left: 0.5ch;
+    padding: 0.2em 0.5em;
+    background: #A77D19;
+    border-radius: 0.5em;
+}
+
+.address-manage .response,
+.admin-approvals .response {
+    display: none;
+    padding: 0.5em;
+    margin: 0.5em 0;
+}
+
+.address-manage .response.err,
+.admin-approvals .response.err {
+    display: block;
+    background: rgba(192, 5, 5, 0.3);
+}
+
+.address-manage .response.success,
+.admin-approvals .response.success {
+    display: block;
+    background: rgba(43, 146, 22, 0.3);
+}
+
+.code-input {
+    font-family: monospace;
+    letter-spacing: 0.5ch;
+}
+
+.address-manage .verify {
+    margin-left: 1ch;
+}
+
 /*                                                      logs */
 
 .prompt.logs {

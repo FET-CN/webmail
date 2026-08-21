@@ -148,6 +148,125 @@ paths:
           description: Local message list with raw MIME encoded as base64.
         "4XX":
           $ref: "#/components/responses/Problem"
+  /v1/mailbox-registrations:
+    get:
+      summary: List the current identity's mailbox registration requests
+      operationId: listMailboxRegistrations
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Registration request list.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+    post:
+      summary: Request a new mailbox address for administrator approval
+      operationId: requestMailboxRegistration
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [local_part]
+              properties:
+                local_part:
+                  type: string
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Registration request created and pending approval.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/mailbox-claims:
+    get:
+      summary: List the current identity's mailbox claim requests
+      operationId: listMailboxClaims
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Claim request list.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+    post:
+      summary: Claim an existing Migadu address; sends a verification code
+      operationId: requestMailboxClaim
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address:
+                  type: string
+      responses:
+        "201":
+          description: Claim request created and verification mail sent.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/mailbox-claims/{claim_id}/verify:
+    post:
+      summary: Submit the verification code for a mailbox claim
+      operationId: verifyMailboxClaim
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claim_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Claim verified; the mailbox is attached when successful.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/mailbox-claims/{claim_id}/complete:
+    post:
+      summary: Retry attaching a verified mailbox claim
+      operationId: completeMailboxClaim
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: claim_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Claim completed and mailbox attached.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/session/accept-suggested-mailbox:
+    post:
+      summary: Accept a backend-generated suggested address during first login
+      operationId: acceptSuggestedMailbox
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Suggested mailbox created and selected.
+        "4XX":
+          $ref: "#/components/responses/Problem"
   /v1/mailboxes:
     get:
       summary: List mailboxes
@@ -491,6 +610,75 @@ paths:
           description: Audit event list.
         "4XX":
           $ref: "#/components/responses/Problem"
+  /v1/admin/mailbox-registrations:
+    get:
+      summary: List mailbox registration requests (default pending)
+      operationId: adminListMailboxRegistrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: Registration request list.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailbox-registrations/{request_id}/approve:
+    post:
+      summary: Approve a pending mailbox registration and create the mailbox
+      operationId: adminApproveMailboxRegistration
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Registration approved and mailbox created.
+        "4XX":
+          $ref: "#/components/responses/Problem"
+  /v1/admin/mailbox-registrations/{request_id}/reject:
+    post:
+      summary: Reject a pending mailbox registration
+      operationId: adminRejectMailboxRegistration
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Registration rejected.
+        "4XX":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     bearerAuth:
@@ -546,6 +734,75 @@ components:
         role:
           type: string
           enum: [member, manager]
+    RegistrationRequest:
+      type: object
+      required: [object, id, userId, localPart, domain, address, state, createdAt, updatedAt]
+      properties:
+        object:
+          const: registration_request
+        id:
+          type: string
+        userId:
+          type: string
+        localPart:
+          type: string
+        domain:
+          type: string
+        address:
+          type: string
+        name:
+          type: string
+        state:
+          type: string
+          enum: [pending, approved, rejected]
+        mailboxId:
+          type: string
+        reviewNote:
+          type: string
+        reviewedBy:
+          type: string
+        reviewedAt:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    ClaimRequest:
+      type: object
+      required: [object, id, userId, localPart, domain, address, state, tokenHash, tokenExpiresAt, attempts, verificationMailSentAt, createdAt, updatedAt]
+      properties:
+        object:
+          const: claim_request
+        id:
+          type: string
+        userId:
+          type: string
+        localPart:
+          type: string
+        domain:
+          type: string
+        address:
+          type: string
+        state:
+          type: string
+          enum: [pending_verification, verified, expired]
+        tokenHash:
+          type: string
+          description: HMAC of the verification code; never the plaintext code.
+        tokenExpiresAt:
+          type: string
+        attempts:
+          type: integer
+        verificationMailSentAt:
+          type: string
+        mailboxId:
+          type: string
+        claimedAt:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
     Mailbox:
       type: object
       required: [object, id, name, flags, delimiter]

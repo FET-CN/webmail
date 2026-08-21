@@ -27,6 +27,10 @@ export interface MigaduAdmin {
     domain: string,
     mailboxLocalPart: string,
   ): Promise<void>;
+  getMailbox(
+    localPart: string,
+    domain: string,
+  ): Promise<MigaduMailbox | null>;
 }
 
 function randomSecret(): string {
@@ -71,7 +75,10 @@ export class MigaduAdminClient implements MigaduAdmin {
     } catch {
       value = null;
     }
-    if (!response.ok && !(ignoreNotFound && response.status === 404)) {
+    if (!response.ok && ignoreNotFound && response.status === 404) {
+      return null as T;
+    }
+    if (!response.ok) {
       const providerError = value && typeof value === "object"
         ? Object.fromEntries(
           Object.entries(value as Record<string, unknown>).filter(([key, item]) =>
@@ -97,6 +104,19 @@ export class MigaduAdminClient implements MigaduAdmin {
       );
     }
     return value as T;
+  }
+
+  async getMailbox(
+    localPart: string,
+    domain: string,
+  ): Promise<MigaduMailbox | null> {
+    return this.request<MigaduMailbox | null>(
+      `/domains/${encodeURIComponent(domain)}/mailboxes/${
+        encodeURIComponent(localPart)
+      }`,
+      { method: "GET" },
+      true,
+    );
   }
 
   async createMailbox(
