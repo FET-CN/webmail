@@ -5752,7 +5752,7 @@ class _LoginView extends View {
             await window.AccountSettings.init();
             window.LoginView?.close();
             window.LoginView = undefined;
-            window.AccountView = new _AccountView(client, session.mailboxes || [], mailbox.id);
+            window.AccountView = new _AccountView(client, session.mailboxes || [], mailbox.id, session);
             await window.AccountView.open();
         } catch(error) {
             set_status('ERR', null, error);
