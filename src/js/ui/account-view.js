@@ -7,6 +7,7 @@ class _AccountView extends View {
         this.currentAccountId = currentAccountId;
         this.currentAccount = accounts.find(account => account.id === currentAccountId) || null;
         this.session = session;
+        this.identity = session?.user || null;
         this.admin = session?.admin === true;
         this.pendingCounts = session?.admin_pending_registration_count || 0;
         this.imap.onlogin = this.onLogin;
@@ -77,7 +78,9 @@ class _AccountView extends View {
             }
         }
         if(this.imap.username) {
-            this.el.querySelectorAll('.username').forEach(e => e.innerText=this.imap.username);
+            this.el.querySelectorAll('.username').forEach(e =>
+                e.innerText = this.identity?.preferredUsername || this.imap.username
+            );
             this.el.querySelectorAll('.onlyloggedin').forEach(e => e.classList.remove('hidden'));
             this.el.querySelectorAll('.account_status:not(.onlyloggedin)').forEach(e => e.classList.add('hidden'));
 
