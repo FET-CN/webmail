@@ -199,6 +199,10 @@
     border-radius: 0.5em;
 }
 
+.approval-count:empty {
+    display: none;
+}
+
 .address-manage .response,
 .admin-approvals .response {
     display: none;
