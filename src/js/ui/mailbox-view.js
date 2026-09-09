@@ -491,10 +491,14 @@ class _MailboxView extends View {
     }
 
     refresh = async () => {
-        await set_status(`Refreshing ${this.mailbox.mailbox}`, "LOAD");
-        await this.mailbox.load();
-        await this.loadLocalMessages();
-        await set_status("OK");
+        try {
+            await set_status(`Refreshing ${this.mailbox.mailbox}`, "LOAD");
+            await this.mailbox.load();
+            await this.loadLocalMessages();
+            await set_status("OK");
+        } catch(error) {
+            await set_status("ERR", null, error);
+        }
     }
 
     onClickSelectAll = async () => {

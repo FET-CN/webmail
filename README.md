@@ -21,6 +21,20 @@ Do not edit the generated `index.html` directly. The classic script order in
 `scripts/build.mjs` is intentional and is part of the application runtime
 contract.
 
+Run the browser IMAP client's protocol regression tests without a mail server:
+
+```sh
+node --test scripts/imap-client.test.mjs
+```
+
+These tests replay binary WebSocket frames through the actual client, including
+every split point in SELECT response codes and a message FETCH. The raw Deno
+and Worker bridges preserve TCP chunk boundaries, which can fall anywhere in
+an IMAP response. Incomplete responses must remain buffered without rejecting
+the response queue; complete responses must consume byte offsets, not decoded
+character offsets. Processing failures and disconnects must reject pending
+commands so the interface can leave its loading state.
+
 ## Deployment
 
 The IAM, Authentik, Migadu, internal-mail suffix, and runtime deployment

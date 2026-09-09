@@ -57,6 +57,7 @@ class ImapClient {
         // Internal Callbacks
         this._onopen = null;    // On socket open and received greeting
         this._onconnecterror = null; // Connection failure before greeting
+        this._oncommanderror = null; // Reject the active command on transport/processing failure
         this._onclose = null;   // On socket close
         this._onmessage = null; // On partial or full message
         this._onerror = null;   // On socket error
@@ -131,7 +132,9 @@ class ImapClient {
             handler = handler.bind(this, tag);
 
             const finishPromise = new Promise((resolve, reject) => {
+                this._oncommanderror = reject;
                 handler = handler.bind(this, (ok, data, rest) => {
+                    this._oncommanderror = null;
                     log('imap','#command: finishCallback',DEBUG,cmd);
                     this.noopStartTimeout();
                     if (ok) {
@@ -147,7 +150,13 @@ class ImapClient {
             }
 
             this._onmessage = handler;
-            this.#send(`${tag} ${cmd}`, containsPass);
+            try {
+                this.#send(`${tag} ${cmd}`, containsPass);
+            } catch(error) {
+                this._onmessage = null;
+                this._oncommanderror(error);
+                this._oncommanderror = null;
+            }
 
             return finishPromise;
 
@@ -823,7 +832,8 @@ class ImapClient {
             const rest = decoded.slice(0,command_match.index);
 
             const [ _, ok, data ] = command_match;
-            this.responseBuffer = this.responseBuffer.slice(command_match.index + _.length);
+            const consumed = this.encoder.encode(decoded.slice(0, command_match.index + _.length));
+            this.responseBuffer = this.responseBuffer.slice(consumed.byteLength);
 
             await responseCallback(ok === "OK", data, rest);
         }
@@ -876,6 +886,9 @@ class ImapClient {
 
     #onWsClose = async (event) => {
         this.connected = false;
+        this._oncommanderror?.(new Error('IMAP connection closed before command completed'));
+        this._oncommanderror = null;
+        this._onmessage = null;
         log('imap', `WebSocket closed (${event?.code || 1006}): ${event?.reason || 'no reason'}`, WARN, event);
         if(!this.receivedGreeting) {
             this._onconnecterror?.(new Error('Connection closed before IMAP greeting'));
@@ -907,12 +920,14 @@ class ImapClient {
     }
 
     #onWsMessage = async ({ data }) => {
+        const socket = this.ws;
         data = new Uint8Array(data);
 
         const decoded = this.decoder.decode(data);
         log('imap_in',decoded.toString(),NET);
 
         this.responseQueue = this.responseQueue.then(async () => {
+            if(socket !== this.ws || socket.readyState !== WebSocket.OPEN) return;
             const newBuffer = new Uint8Array(this.responseBuffer.byteLength + data.byteLength);
             newBuffer.set(this.responseBuffer,0);
             newBuffer.set(data,this.responseBuffer.byteLength);
@@ -926,6 +941,15 @@ class ImapClient {
 
             await this._onmessage?.();
             await this.onmessage?.();
+        }).catch(error => {
+            // A failed parser/storage callback must not strand commandQueue or
+            // leave subsequent frames chained to a rejected response promise.
+            this._oncommanderror?.(error);
+            this._oncommanderror = null;
+            log('imap', 'Failed to process IMAP response; closing connection', WARN);
+            socket.close(1011, 'IMAP response processing failed');
+            this._onerror?.(error);
+            this.onerror?.(error);
         });
 
         await this.responseQueue;
@@ -1424,7 +1448,10 @@ class ImapClient {
                 if(newpos === -1)
                     return {newpos: -1, response: null};
                 pos += newpos;
-                return {newpos: pos, response: response};
+                return {
+                    newpos: this.encoder.encode(decoded.slice(0, pos)).byteLength,
+                    response: response
+                };
             }
 
             var {newpos, value} = await this.parseAtom(decoded.slice(pos));
@@ -1462,6 +1489,9 @@ class ImapClient {
 
             response[key] = value;
         }
+
+        // TCP/WebSocket frames can end anywhere inside a response code.
+        return {newpos: -1, response: null};
     }
 
     // ---------------- IDLE support ----------------
