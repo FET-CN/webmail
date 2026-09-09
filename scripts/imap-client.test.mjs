@@ -25,13 +25,19 @@ async function createClient() {
     }
 
     const context = vm.createContext({
-        TextEncoder, TextDecoder, Uint8Array,
+        TextEncoder, TextDecoder, Uint8Array, Blob,
         WebSocket: Socket,
         window: { clearTimeout, setTimeout },
         document: { querySelector: () => ({ classList: { remove() {} } }) },
         log() {}, DEBUG: 0, NET: 0, WARN: 0,
     });
     const Client = vm.runInContext(`${source}\nImapClient;`, context);
+    for (const file of ['format', 'message-headers', 'message', 'imap-mailbox']) {
+        vm.runInContext(readFileSync(
+            new URL(`../src/js/mail/${file}.js`, import.meta.url), 'utf8'
+        ), context);
+    }
+    const Mailbox = vm.runInContext('ImapMailbox;', context);
     const client = new Client('ws://imap.test');
     client.noopStartTimeout = () => {};
     const connected = client.connect();
@@ -41,7 +47,7 @@ async function createClient() {
     });
     await receive('* OK IMAP ready\r\n');
     await connected;
-    return { client, receive };
+    return { client, receive, Mailbox };
 }
 
 async function flushCommands() {
@@ -197,4 +203,92 @@ test('a send failure clears the active command callbacks', async () => {
     await assert.rejects(client.fetch(7, true), /Socket send failed/);
     assert.equal(client._oncommanderror, null);
     assert.equal(client._onmessage, null);
+});
+
+async function createMailbox() {
+    const harness = await createClient();
+    const mailbox = new harness.Mailbox(harness.client, 'test@example.test', 'INBOX');
+    mailbox.clear();
+    mailbox.uidvalidity = 1;
+    mailbox.storage = { async put() {}, async get() {} };
+    harness.client.mailboxes.INBOX = mailbox;
+    harness.client.selected = mailbox;
+    harness.client.isNotify = true;
+    return { ...harness, mailbox };
+}
+
+const headers = 'From: sender@example.test\r\nSubject: test\r\n\r\n';
+
+function headerFetch(uid = 7) {
+    return `* 1 FETCH (UID ${uid} FLAGS (\\Seen) BODY[HEADER.FIELDS (FROM SUBJECT)] `
+        + `{${encoder.encode(headers).length}}\r\n${headers})\r\n`;
+}
+
+test('INBOX load fetches headers after an unknown UID receives only metadata', async () => {
+    const { client, receive, mailbox } = await createMailbox();
+    const loading = mailbox.load();
+    // Attach immediately: the unfixed mailbox throws while handling SELECT.
+    const completed = completes(loading);
+    await flushCommands();
+    await receive('* 1 FETCH (UID 7 FLAGS (\\Seen) MODSEQ (42))\r\n');
+    await receive('* 1 FETCH (UID 7 FLAGS (\\Seen) MODSEQ (43))\r\n');
+    await receive('C0001 OK Selected\r\n');
+    await flushCommands();
+    assert.equal(client.ws.sent.length, 2);
+    assert.match(client.ws.sent[1], /^C0002 UID FETCH 7 \(UID MODSEQ FLAGS BODY.PEEK/);
+    await receive(headerFetch() + 'C0002 OK Fetched\r\n');
+    await completed;
+    assert.equal(mailbox.messages[7].headers.get('subject', 'one'), 'test');
+    assert.equal(mailbox.uidFetchQueue.length, 0);
+});
+
+test('metadata-only FETCH preserves an already parsed message', async () => {
+    const { receive, mailbox } = await createMailbox();
+    await receive(headerFetch());
+    assert.equal(mailbox.messages[7].loaded, true);
+    await receive('* 1 FETCH (UID 7 FLAGS (\\Flagged) MODSEQ (43))\r\n');
+    assert.equal(mailbox.messages[7].loaded, true);
+    assert.equal(mailbox.messages[7].headers.get('subject', 'one'), 'test');
+    assert.equal(mailbox.messages[7].flags[0], '\\Flagged');
+});
+
+test('loading a message requests its UID alongside the complete body', async () => {
+    const { client, receive, mailbox } = await createMailbox();
+    await receive(headerFetch());
+    const loading = mailbox.loadMessage(7);
+    await flushCommands();
+    assert.equal(client.ws.sent[0], 'C0001 UID FETCH 7 (UID MODSEQ FLAGS BODY.PEEK[])\r\n');
+    const body = headers + 'Full message body.\r\n';
+    await receive(`* 1 FETCH (UID 7 BODY[] {${encoder.encode(body).length}}\r\n`
+        + body + ')\r\nC0001 OK Fetched\r\n');
+    await completes(loading);
+    await mailbox.messages[7].loadMessage();
+    assert.equal(mailbox.messages[7].body, 'Full message body.\r\n');
+});
+
+test('a sequence header fetch satisfies the queued UID without a duplicate request', async () => {
+    const { client, receive, mailbox } = await createMailbox();
+    await receive('* 1 EXISTS\r\n* 1 FETCH (UID 7 FLAGS ())\r\n');
+    assert.equal(Object.keys(mailbox.messages).length, 0);
+    const loading = mailbox.fetchFromQueue();
+    await flushCommands();
+    assert.match(client.ws.sent[0], /^C0001 FETCH 1 /);
+    await receive(headerFetch() + 'C0001 OK Fetched\r\n');
+    await completes(loading);
+    assert.equal(client.ws.sent.length, 1);
+    assert.equal(mailbox.uidFetchQueue.length, 0);
+    assert.equal(mailbox.seqFetchQueue.length, 0);
+});
+
+test('metadata received during a header fetch remains queued for the next batch', async () => {
+    const { client, receive, mailbox } = await createMailbox();
+    await receive('* 1 FETCH (UID 7 FLAGS ())\r\n');
+    const loading = mailbox.fetchFromQueue();
+    await flushCommands();
+    await receive(headerFetch() + '* 2 FETCH (UID 9 FLAGS ())\r\nC0001 OK Fetched\r\n');
+    await flushCommands();
+    assert.match(client.ws.sent[1] || '', /^C0002 UID FETCH 9 /);
+    await receive(headerFetch(9) + 'C0002 OK Fetched\r\n');
+    await completes(loading);
+    assert.equal(mailbox.messages[9].headers.get('subject', 'one'), 'test');
 });

@@ -13,6 +13,7 @@ class ImapMailbox {
         this.seqFetchQueue = [];
 
         this.headerFields = "UID MODSEQ FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO CC BCC DATE SUBJECT)]";
+        this.fullFields = "UID MODSEQ FLAGS BODY.PEEK[]";
     }
 
     clear() {
@@ -116,9 +117,13 @@ class ImapMailbox {
             await this.fetch(this.seqFetchQueue,false,false);
             this.seqFetchQueue = [];
         }
-        if(this.uidFetchQueue.length) {
-            await this.fetch(this.uidFetchQueue);
-            this.uidFetchQueue = [];
+        while(this.uidFetchQueue.length) {
+            const uids = [...this.uidFetchQueue];
+            await this.fetch(uids);
+            // Unsolicited metadata can queue other UIDs while FETCH runs.
+            // Remove only this batch, including UIDs no longer on the server.
+            const requested = new Set(uids);
+            this.uidFetchQueue = this.uidFetchQueue.filter(uid => !requested.has(uid));
         }
     }
 
@@ -182,31 +187,41 @@ class ImapMailbox {
             return;
         }
 
-        const exist_queue_index = this.seqFetchQueue.indexOf(parseInt(seq));
-        if(exist_queue_index !== -1) this.seqFetchQueue.splice(exist_queue_index,1);
-
         const uid = fetch.uid;
+        const exists = this.messages[uid];
+        const hasContent = 'body' in fetch;
 
-        if('body' in fetch) {
+        if(!exists && !hasContent) {
+            // QRESYNC/NOTIFY can introduce a UID with metadata only. Fetch its
+            // headers after the active command; awaiting FETCH here deadlocks
+            // the response queue that must finish that command first.
+            if(!this.uidFetchQueue.includes(uid)) this.uidFetchQueue.push(uid);
+            return;
+        }
+
+        if(hasContent) {
             fetch.message = fetch.body;
             delete fetch.body;
+            const seqIndex = this.seqFetchQueue.indexOf(parseInt(seq));
+            if(seqIndex !== -1) this.seqFetchQueue.splice(seqIndex, 1);
+            const uidIndex = this.uidFetchQueue.indexOf(uid);
+            if(uidIndex !== -1) this.uidFetchQueue.splice(uidIndex, 1);
         }
 
         fetch.seq = seq;
 
-        const exists = this.messages[uid];
         const message = exists || new Message(fetch);
 
         if(exists) {
             await message.update(fetch);
-            message.loaded = false;
+            if(hasContent) message.loaded = false;
         } else {
             await message.loadMessage();
             this.messages[uid] = message;
         }
 
         await this.saveMessage(message);
-        if('flags' in fetch || 'body' in fetch)
+        if('flags' in fetch || hasContent)
             await this.onfetch?.(message);
     }
 

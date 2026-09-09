@@ -35,6 +35,11 @@ the response queue; complete responses must consume byte offsets, not decoded
 character offsets. Processing failures and disconnects must reject pending
 commands so the interface can leave its loading state.
 
+The suite also exercises the real mailbox and message objects: metadata-only
+FETCH responses for unknown UIDs queue a header fetch after SELECT completes,
+while flag updates preserve already parsed content. Metadata alone must not
+be passed to the MIME loader or saved as a complete message in the local cache.
+
 ## Deployment
 
 The IAM, Authentik, Migadu, internal-mail suffix, and runtime deployment
