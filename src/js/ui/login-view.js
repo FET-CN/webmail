@@ -90,7 +90,11 @@ class _LoginView extends View {
         } catch(error) {
             set_status('ERR', null, error);
             log('auth', 'Unable to connect to the mailbox', ERR, error);
-            await client.close();
+            // IMAP CLOSE requires authentication and may expunge messages.
+            // Failed setup needs transport cleanup, preserving the original error.
+            client.reconnect = false;
+            client.ws?.close();
+            throw error;
         }
     }
 }

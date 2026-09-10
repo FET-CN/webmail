@@ -401,13 +401,10 @@ class ImapClient {
         try {
             await this.#command(select_command);
         } catch(e) {
-            if(e.message && (e.message.startsWith("[NONEXISTENT]") || e.message.startsWith("[TRYCREATE]"))) {
-                await this.create(mailbox);
-                return await this.select(mailbox,uidvalidity,highestmodseq,uidranges);
-            } else {
-                this.selected = null;
-                throw e;
-            }
+            // Opening a mailbox must not create it or replace the SELECT
+            // error with a secondary CREATE failure (including for INBOX).
+            this.selected = null;
+            throw e;
         }
 
         if(!this.isNotify) await this.notify();

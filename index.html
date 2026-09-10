@@ -1747,13 +1747,10 @@ class ImapClient {
         try {
             await this.#command(select_command);
         } catch(e) {
-            if(e.message && (e.message.startsWith("[NONEXISTENT]") || e.message.startsWith("[TRYCREATE]"))) {
-                await this.create(mailbox);
-                return await this.select(mailbox,uidvalidity,highestmodseq,uidranges);
-            } else {
-                this.selected = null;
-                throw e;
-            }
+            // Opening a mailbox must not create it or replace the SELECT
+            // error with a secondary CREATE failure (including for INBOX).
+            this.selected = null;
+            throw e;
         }
 
         if(!this.isNotify) await this.notify();
@@ -5806,7 +5803,11 @@ class _LoginView extends View {
         } catch(error) {
             set_status('ERR', null, error);
             log('auth', 'Unable to connect to the mailbox', ERR, error);
-            await client.close();
+            // IMAP CLOSE requires authentication and may expunge messages.
+            // Failed setup needs transport cleanup, preserving the original error.
+            client.reconnect = false;
+            client.ws?.close();
+            throw error;
         }
     }
 }

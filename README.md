@@ -40,6 +40,11 @@ FETCH responses for unknown UIDs queue a header fetch after SELECT completes,
 while flag updates preserve already parsed content. Metadata alone must not
 be passed to the MIME loader or saved as a complete message in the local cache.
 
+Opening a mailbox preserves the server's SELECT error without automatically
+creating a folder. Failed session setup closes the WebSocket directly; it must
+not send IMAP CLOSE, which requires authentication and can expunge messages.
+Regression tests cover both paths so secondary errors cannot hide the cause.
+
 ## Deployment
 
 The IAM, Authentik, Migadu, internal-mail suffix, and runtime deployment

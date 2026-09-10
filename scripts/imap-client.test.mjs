@@ -292,3 +292,58 @@ test('metadata received during a header fetch remains queued for the next batch'
     await completes(loading);
     assert.equal(mailbox.messages[9].headers.get('subject', 'one'), 'test');
 });
+
+test('opening INBOX preserves SELECT errors without trying to create it', async () => {
+    const { client, receive } = await createClient();
+    client.isNotify = true;
+    const loading = client.select('INBOX');
+    const outcome = loading.catch(error => error);
+    await flushCommands();
+    await receive('C0001 NO [NONEXISTENT] Mailbox unavailable\r\n');
+    await flushCommands();
+    // Replay the reported secondary error if SELECT attempted CREATE.
+    if(client.ws.sent.length > 1) {
+        await receive('C0002 NO [ALREADYEXISTS] Mailbox already exists\r\n');
+    }
+    const error = await completes(outcome);
+    assert.match(error.message, /^\[NONEXISTENT\] Mailbox unavailable$/);
+    assert.deepEqual(client.ws.sent, ['C0001 SELECT "INBOX"\r\n']);
+    assert.equal(client.selected, null);
+});
+
+test('session login failure closes the socket without an unauthenticated CLOSE', async () => {
+    const { client, receive } = await createClient();
+    client.capabilities.add('AUTH=PLAIN');
+    client.connect = async () => {};
+    const statuses = [];
+    const context = vm.createContext({
+        View: class {},
+        ImapClient: class { constructor() { return client; } },
+        window: { config: { imap_server: 'ws://imap.test' } },
+        document: { querySelector: () => ({ style: {} }) },
+        request_notifications() {},
+        set_status: (...args) => statuses.push(args),
+        log() {}, ERR: 0,
+    });
+    const source = readFileSync(
+        new URL('../src/js/ui/login-view.js', import.meta.url), 'utf8'
+    );
+    const LoginView = vm.runInContext(`${source}\n_LoginView;`, context);
+    const login = LoginView.prototype.loginFromSession.call({}, {
+        current_mailbox_id: 'mailbox-1',
+        mailboxes: [{ id: 'mailbox-1', state: 'active', address: 'test@example.test' }],
+    });
+    const outcome = login.catch(error => error);
+    await flushCommands();
+    await receive('C0001 NO [AUTHENTICATIONFAILED] Invalid credentials\r\n');
+    await flushCommands();
+    if(client.ws.sent.length > 1) {
+        await receive('C0002 BAD Command not supported before authentication\r\n');
+    }
+    const error = await completes(outcome);
+    assert.match(error?.message || '', /\[AUTHENTICATIONFAILED\]/);
+    assert.equal(client.ws.sent.length, 1);
+    assert.equal(client.ws.readyState, 3);
+    assert.equal(client.reconnect, false);
+    assert.match(statuses.at(-1)[2].message, /\[AUTHENTICATIONFAILED\]/);
+});
