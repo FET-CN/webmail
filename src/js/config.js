@@ -29,11 +29,26 @@ window.config.smtp_server = websocketURL('/v1/smtp');
 window.config.events_server = websocketURL('/v1/events');
 
 let sessionRefresh = null;
+const REQUEST_TIMEOUT_MS = 30000;
 window.apiFetch = async (path, init = {}) => {
-    const request = () => fetch(apiURL(path), {
-        credentials: 'include',
-        ...init,
-    });
+    const request = async () => {
+        // Without a deadline an upstream stall leaves the UI spinning instead
+        // of failing, and a POST that times out client-side can be retried
+        // into a duplicate send.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(new DOMException(
+            'The request timed out', 'TimeoutError'
+        )), REQUEST_TIMEOUT_MS);
+        try {
+            return await fetch(apiURL(path), {
+                credentials: 'include',
+                ...init,
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timer);
+        }
+    };
     let response = await request();
     if(response.status !== 401 || path.startsWith('/v1/session/')) return response;
     sessionRefresh ||= fetch(apiURL('/v1/session/refresh'), {

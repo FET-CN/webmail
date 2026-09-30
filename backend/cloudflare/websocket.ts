@@ -21,6 +21,8 @@ export interface UpstreamCredentials {
   password: string;
   protocol: "imap" | "smtp";
   identityExpiresAt?: number;
+  /** Test seam: overrides the keepalive cadence. */
+  keepaliveMs?: number;
 }
 
 export function transformCredentials(
@@ -82,6 +84,35 @@ export function transformCredentials(
     }
     return output;
   };
+}
+
+/**
+ * Migadu closes authenticated IMAP connections that see no traffic for 180
+ * seconds ("* BYE Idle timeout"). A browser heartbeat alone is not enough:
+ * the tab can be frozen, backgrounded, or suspended, and the page may still
+ * be running the pre-fix bundle. The bridge therefore keeps the upstream
+ * connection warm itself, which no client state can defeat.
+ */
+const UPSTREAM_KEEPALIVE_MS = 60_000;
+const KEEPALIVE_TAG = "K1";
+
+/**
+ * Drops the tagged keepalive response before the browser sees it. The client
+ * parses untagged data positionally and would stall on an unknown `K1 OK`
+ * line that is not part of any command it issued.
+ */
+function stripKeepaliveResponse(chunk: Uint8Array): Uint8Array | null {
+  const text = new TextDecoder().decode(chunk);
+  if (!text.includes(KEEPALIVE_TAG)) return chunk;
+  const lines = text.split("\r\n");
+  const kept: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith(`${KEEPALIVE_TAG} `)) continue;
+    kept.push(line);
+  }
+  const text2 = kept.join("\r\n");
+  const bytes = new TextEncoder().encode(text2);
+  return bytes.byteLength === 0 ? null : bytes;
 }
 
 /**
@@ -170,11 +201,31 @@ export function startRawWebSocketBridge(
         }
       }
       pending.length = 0;
-      await upstream.readable.pipeTo(
-        new WritableStream<Uint8Array>({
-          write: (chunk) => sendBytes(socket, chunk),
-        }),
-      );
+      // The keepalive only makes sense for IMAP; an SMTP session is short
+      // lived and the server closes it after DATA.
+      const keepaliveTimer = credentials?.protocol === "imap"
+        ? setInterval(() => {
+          const activeWriter = writer;
+          if (!activeWriter) return;
+          // eslint-disable-next-line no-console
+          console.log("Sending upstream keepalive.");
+          void activeWriter
+            .write(new TextEncoder().encode(`${KEEPALIVE_TAG} NOOP\r\n`))
+            .catch(() => fail());
+        }, credentials.keepaliveMs ?? UPSTREAM_KEEPALIVE_MS)
+        : undefined;
+      try {
+        await upstream.readable.pipeTo(
+          new WritableStream<Uint8Array>({
+            write: (chunk) => {
+              const forwardable = stripKeepaliveResponse(chunk);
+              if (forwardable) sendBytes(socket, forwardable);
+            },
+          }),
+        );
+      } finally {
+        if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
+      }
       if (!closed && socket.readyState === WebSocket.OPEN) {
         console.warn("Protocol upstream closed the connection.");
         socket.close(1011, "Upstream disconnected");
