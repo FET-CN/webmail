@@ -160,3 +160,81 @@ Deno.test("raw bridge preserves binary bytes after the login line", () => {
   );
   assert(output[1].every((value, index) => value === binary[index]));
 });
+
+Deno.test("the bridge keeps the IMAP upstream warm when the browser is idle", async () => {
+  const socket = new FakeSocket();
+  const writes: Uint8Array[] = [];
+  const closed = { value: false };
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const readable = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controllerRef = controller;
+    },
+  });
+
+  startRawWebSocketBridge(
+    socket as unknown as WebSocket,
+    async () => upstream(readable, writes, closed),
+    {
+      username: "_webmail_backend@example.com",
+      password: "server-secret",
+      protocol: "imap",
+      keepaliveMs: 10,
+    },
+  );
+  socket.receive("A001 LOGIN placeholder\r\n");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert(
+    new TextDecoder().decode(writes[0]) ===
+      'A001 LOGIN "_webmail_backend@example.com" "server-secret"\r\n',
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  const noop = writes.map((chunk) => new TextDecoder().decode(chunk))
+    .find((text) => /^K\d+ NOOP/.test(text));
+  assert(noop, "the bridge should send a keepalive NOOP upstream");
+  controllerRef?.close();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+Deno.test("the keepalive response is not forwarded to the browser", async () => {
+  const socket = new FakeSocket();
+  const writes: Uint8Array[] = [];
+  const closed = { value: false };
+  let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const readable = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controllerRef = controller;
+    },
+  });
+
+  startRawWebSocketBridge(
+    socket as unknown as WebSocket,
+    async () => upstream(readable, writes, closed),
+    {
+      username: "_webmail_backend@example.com",
+      password: "server-secret",
+      protocol: "imap",
+      keepaliveMs: 10_000,
+    },
+  );
+  socket.receive("A001 LOGIN placeholder\r\n");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  controllerRef?.enqueue(
+    new TextEncoder().encode("K1 OK NOOP completed\r\n* 3 EXISTS\r\n"),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const forwarded = socket.sent.map((data) => new TextDecoder().decode(data))
+    .join("");
+  assert(
+    !forwarded.includes("K1"),
+    "the browser must never see the bridge's own tag",
+  );
+  assert(
+    forwarded.includes("* 3 EXISTS"),
+    "real server data in the same chunk must still be forwarded",
+  );
+  controllerRef?.close();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});

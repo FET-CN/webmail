@@ -8,7 +8,7 @@ const source = readFileSync(
 );
 const encoder = new TextEncoder();
 
-async function createClient() {
+async function createClient(recorded = null) {
     class Socket {
         static OPEN = 1;
         readyState = Socket.OPEN;
@@ -27,7 +27,7 @@ async function createClient() {
     const context = vm.createContext({
         TextEncoder, TextDecoder, Uint8Array, Blob,
         WebSocket: Socket,
-        window: { clearTimeout, setTimeout },
+        window: { clearTimeout, setTimeout: recordTimer(recorded) },
         document: { querySelector: () => ({ classList: { remove() {} } }) },
         log() {}, DEBUG: 0, NET: 0, WARN: 0,
     });
@@ -39,7 +39,8 @@ async function createClient() {
     }
     const Mailbox = vm.runInContext('ImapMailbox;', context);
     const client = new Client('ws://imap.test');
-    client.noopStartTimeout = () => {};
+    // Tests that do not assert on timers keep the loop stubbed out.
+    if(!recorded) client.noopStartTimeout = () => {};
     const connected = client.connect();
     await client.ws.onopen();
     const receive = bytes => client.ws.onmessage({
@@ -347,3 +348,59 @@ test('session login failure closes the socket without an unauthenticated CLOSE',
     assert.equal(client.reconnect, false);
     assert.match(statuses.at(-1)[2].message, /\[AUTHENTICATIONFAILED\]/);
 });
+
+test('the keepalive heartbeat beats the 180s upstream idle timeout', () => {
+    // Migadu sends "* BYE Idle timeout" after 180s without traffic; a longer
+    // heartbeat let every session die and rebuild every three minutes.
+    const { Client } = createHarness();
+    assert.ok(
+        Client.KEEPALIVE_INTERVAL_MS <= 60000,
+        `heartbeat ${Client.KEEPALIVE_INTERVAL_MS}ms must stay under the upstream idle timeout`
+    );
+    assert.ok(
+        Client.KEEPALIVE_INTERVAL_MS >= 30000,
+        'heartbeat must leave room for a throttled background tab'
+    );
+});
+
+test('a completed command arms the keepalive timer', async () => {
+    const scheduled = [];
+    const { client, receive } = await createClient(scheduled);
+    const { Client } = createHarness();
+
+    const loading = client.noop();
+    await flushCommands();
+    await receive('C0001 OK NOOP completed\r\n');
+    await completes(loading);
+
+    assert.ok(
+        scheduled.includes(Client.KEEPALIVE_INTERVAL_MS),
+        `expected the keepalive timer (${Client.KEEPALIVE_INTERVAL_MS}ms), got ${JSON.stringify(scheduled)}`
+    );
+});
+
+function recordTimer(recorded) {
+    if (!recorded) return setTimeout;
+    return (fn, ms) => {
+        recorded.push(ms);
+        return setTimeout(fn, 0);
+    };
+}
+
+function createHarness() {
+    class Socket {
+        static OPEN = 1;
+        readyState = Socket.OPEN;
+        send() {}
+        close() { this.readyState = 3; }
+    }
+    const context = vm.createContext({
+        TextEncoder, TextDecoder, Uint8Array, Blob,
+        WebSocket: Socket,
+        window: { clearTimeout, setTimeout },
+        document: { querySelector: () => ({ classList: { remove() {} } }) },
+        log() {}, DEBUG: 0, NET: 0, WARN: 0,
+    });
+    const Client = vm.runInContext(`${source}\nImapClient;`, context);
+    return { Client };
+}

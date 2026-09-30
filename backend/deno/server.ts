@@ -52,12 +52,27 @@ const storage: KeyValueStore = {
 
 const events = new MemoryEventHub();
 
-function connectTls(hostname: string, port: number): Promise<ByteDuplex> {
-  return Deno.connectTls({ hostname, port }).then((connection) => ({
+// A stalled upstream dial would otherwise hold the WebSocket handshake open
+// until the platform gives up, so the browser waits on a bridge that will
+// never answer. Deno.connectTls takes no AbortSignal, so the deadline covers
+// the TCP dial and the TLS handshake is completed on the already-open socket.
+const UPSTREAM_CONNECT_TIMEOUT_MS = 10_000;
+
+async function connectTls(
+  hostname: string,
+  port: number,
+): Promise<ByteDuplex> {
+  const socket = await Deno.connect({
+    hostname,
+    port,
+    signal: AbortSignal.timeout(UPSTREAM_CONNECT_TIMEOUT_MS),
+  });
+  const connection = await Deno.startTls(socket, { hostname });
+  return {
     readable: connection.readable,
     writable: connection.writable,
     close: () => connection.close(),
-  }));
+  };
 }
 
 const runtime: RuntimeAdapter = {

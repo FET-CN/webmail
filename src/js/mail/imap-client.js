@@ -1593,6 +1593,13 @@ class ImapClient {
 
     // ---------------------Timers------------------------
 
+    // Migadu closes authenticated IMAP connections that stay idle for 180
+    // seconds ("* BYE Idle timeout"). A 300s heartbeat could never beat that
+    // deadline, so every session was torn down and rebuilt every 3 minutes.
+    // Measured on 2026-09-25: idle sockets die at 120s, 60s NOOP survives
+    // past 420s. Keep the margin wide enough for a throttled background tab.
+    static KEEPALIVE_INTERVAL_MS = 60000;
+
     async noopStartTimeout() {
         if(this._noopTimeout)
             window.clearTimeout(this._noopTimeout);
@@ -1600,7 +1607,7 @@ class ImapClient {
         this._noopTimeout = window.setTimeout((async () => {
             await this.noop();
             await this.noopStartTimeout();
-        }).bind(this),300000);
+        }).bind(this),ImapClient.KEEPALIVE_INTERVAL_MS);
     }
 
     // -------------------Data helpers--------------------

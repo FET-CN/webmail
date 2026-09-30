@@ -2939,6 +2939,13 @@ class ImapClient {
 
     // ---------------------Timers------------------------
 
+    // Migadu closes authenticated IMAP connections that stay idle for 180
+    // seconds ("* BYE Idle timeout"). A 300s heartbeat could never beat that
+    // deadline, so every session was torn down and rebuilt every 3 minutes.
+    // Measured on 2026-09-25: idle sockets die at 120s, 60s NOOP survives
+    // past 420s. Keep the margin wide enough for a throttled background tab.
+    static KEEPALIVE_INTERVAL_MS = 60000;
+
     async noopStartTimeout() {
         if(this._noopTimeout)
             window.clearTimeout(this._noopTimeout);
@@ -2946,7 +2953,7 @@ class ImapClient {
         this._noopTimeout = window.setTimeout((async () => {
             await this.noop();
             await this.noopStartTimeout();
-        }).bind(this),300000);
+        }).bind(this),ImapClient.KEEPALIVE_INTERVAL_MS);
     }
 
     // -------------------Data helpers--------------------
@@ -8530,11 +8537,26 @@ window.config.smtp_server = websocketURL('/v1/smtp');
 window.config.events_server = websocketURL('/v1/events');
 
 let sessionRefresh = null;
+const REQUEST_TIMEOUT_MS = 30000;
 window.apiFetch = async (path, init = {}) => {
-    const request = () => fetch(apiURL(path), {
-        credentials: 'include',
-        ...init,
-    });
+    const request = async () => {
+        // Without a deadline an upstream stall leaves the UI spinning instead
+        // of failing, and a POST that times out client-side can be retried
+        // into a duplicate send.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(new DOMException(
+            'The request timed out', 'TimeoutError'
+        )), REQUEST_TIMEOUT_MS);
+        try {
+            return await fetch(apiURL(path), {
+                credentials: 'include',
+                ...init,
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timer);
+        }
+    };
     let response = await request();
     if(response.status !== 401 || path.startsWith('/v1/session/')) return response;
     sessionRefresh ||= fetch(apiURL('/v1/session/refresh'), {
